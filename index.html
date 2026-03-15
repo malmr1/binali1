@@ -919,7 +919,7 @@ function renderOrders(){
 }
 
 function openOrderModal(){
-  _orderItems=[];
+  initProducts();
   const empOpts=db.users.filter(u=>['staff','manager'].includes(u.role)).map(u=>`<option value="${u.name}">${u.name}</option>`).join('');
   const prods=(cfg.products||[]).map(t=>`<option>${t}</option>`).join('');
   const types=(cfg.orderTypes||[]).map(t=>`<option>${t}</option>`).join('');
@@ -937,8 +937,12 @@ function openOrderModal(){
           <div class="fg"><label>الموظف المسؤول</label><select id="fEmp"><option value="">اختر...</option>${empOpts}</select></div>
           <div class="fg"><label>اسم العميلة</label><input type="text" id="fClient"></div>
           <div class="fg"><label>رقم الجوال</label><input type="text" id="fPhone"></div>
-          <div class="fg"><label>المنتج</label><select id="fProd">${prods}</select></div>
-          <div class="fg"><label>نوع الطلب</label><select id="fType" onchange="checkRental()">${types}</select></div>
+          <div class="fg ffull" style="grid-column:1/-1">
+            <label>المنتجات <span style="font-size:10px;color:var(--gr)">منتج واحد على الأقل</span></label>
+            <div id="productsContainer"></div>
+            <button type="button" class="btn-sm" style="margin-top:7px" onclick="addProductRow()">+ إضافة منتج</button>
+            <div id="productsTotalDisp" style="margin-top:8px;padding:8px 11px;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);border-radius:2px;font-size:12px;font-weight:700;color:var(--gold);display:none"></div>
+          </div>
 
           <div class="fg">
             <label>تاريخ الطلب (م)</label>
@@ -960,7 +964,7 @@ function openOrderModal(){
             <input type="date" id="fDDate" oninput="syncH('fDDate','fDDateH')" readonly style="color:var(--gr);background:var(--d3);border:1px solid var(--d4);border-radius:2px;padding:10px 12px;font-family:Tajawal,sans-serif;font-size:13px;width:100%;outline:none">
           </div>
 
-          <div class="fg"><label>المبلغ الكلي (ر.س) <span style="font-size:9px;color:var(--gr)">يتعبأ من البنود</span></label><input type="number" id="fAmt" oninput="calcDiscPreview()" placeholder="0" readonly style="color:var(--gold);cursor:default"></div>
+          <div class="fg"><label>المبلغ الكلي (ر.س) <span style="font-size:9px;color:var(--gr)">يتعبأ تلقائياً</span></label><input type="number" id="fAmt" oninput="calcDiscPreview()" placeholder="0" readonly style="color:var(--gold)"></div>
           <div class="fg"><label>طريقة الدفع</label><select id="fPay">${pays}</select></div>
           <div class="fg"><label>العربون / الدفعة الأولى</label><input type="number" id="fDep"></div>
           <div class="fg" id="insRow" style="display:none"><label>تأمين (ر.س)</label><input type="number" id="fIns" value="0"></div>
@@ -1006,14 +1010,7 @@ function openOrderModal(){
           </div>
         </div>
 
-        <!-- ORDER ITEMS -->
-        <div style="border-top:1px solid rgba(201,168,76,.15);margin-top:14px;padding-top:13px">
-          <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:11px">🛍️ بنود الطلب</div>
-          <div style="font-size:11px;color:var(--gr);margin-bottom:9px">أضف كل بند باسمه وسعره — المجموع يتعبأ تلقائياً في المبلغ الكلي</div>
-          <div id="orderItemsContainer"></div>
-          <button class="btn-sm" onclick="addOrderItem()" type="button">+ إضافة بند</button>
-          <div id="orderItemsTotal" style="margin-top:10px;padding:9px;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);border-radius:2px;font-size:13px;font-weight:700;color:var(--gold);display:none"></div>
-        </div>
+
 
       </div>
       <div class="m-foot">
@@ -1024,7 +1021,7 @@ function openOrderModal(){
   </div>`;
   setTimeout(()=>{
     syncH('fODate','fODateH');
-    checkRental();
+    renderProducts();
     document.getElementById('fDiscType')?.addEventListener('change',()=>{
       document.getElementById('discValRow').style.display=document.getElementById('fDiscType').value!=='none'?'block':'none';
       calcDiscPreview();
@@ -1041,49 +1038,6 @@ function toggleOrderSection(secId,arrowId){
   if(arrow)arrow.textContent=open?'▲ إغلاق':'▼ فتح';
 }
 
-// Order items - data driven
-let _orderItems=[];
-
-function addOrderItem(){
-  _orderItems.push({name:'',price:0});
-  renderOrderItems();
-}
-
-function renderOrderItems(){
-  const c=document.getElementById('orderItemsContainer');if(!c)return;
-  const prods=(cfg.products||[]);
-  const INP='background:var(--d3);border:1px solid var(--d4);border-radius:2px;padding:7px 9px;color:var(--white);font-family:Tajawal,sans-serif;font-size:12px;outline:none';
-  c.innerHTML=_orderItems.map((item,i)=>`
-    <div style="display:flex;gap:7px;align-items:center;margin-bottom:7px">
-      <select onchange="setOrderItemName(${i},this.value)" style="flex:2;${INP}">
-        <option value="">اختر البند...</option>
-        ${prods.map(p=>`<option value="${p}" ${item.name===p?'selected':''}>${p}</option>`).join('')}
-        <option value="__other__" ${!prods.includes(item.name)&&item.name?'selected':''}>أخرى...</option>
-      </select>
-      ${(!prods.includes(item.name)&&item.name)||item._custom?`<input type="text" value="${item.name}" placeholder="اسم البند" oninput="_orderItems[${i}].name=this.value" style="flex:1.5;${INP}">`:``}
-      <input type="number" value="${item.price||''}" placeholder="السعر" oninput="_orderItems[${i}].price=parseFloat(this.value)||0;calcOrderItemsTotal()" style="flex:1;${INP}">
-      <button type="button" class="tag-del" onclick="_orderItems.splice(${i},1);renderOrderItems()">✕</button>
-    </div>`).join('');
-  calcOrderItemsTotal();
-}
-
-function setOrderItemName(i,val){
-  if(val==='__other__'){_orderItems[i].name='';_orderItems[i]._custom=true;}
-  else{_orderItems[i].name=val;_orderItems[i]._custom=false;}
-  renderOrderItems();
-}
-
-function calcOrderItemsTotal(){
-  const total=_orderItems.reduce((s,it)=>s+(it.price||0),0);
-  const el=document.getElementById('orderItemsTotal');
-  const amtEl=document.getElementById('fAmt');
-  if(amtEl)amtEl.value=total||'';
-  if(el){
-    el.style.display=_orderItems.length>0?'block':'none';
-    el.innerHTML=`المجموع: <strong>${total.toLocaleString()} ر.س</strong>`;
-  }
-  calcDiscPreview();
-}
 
 function getOrderMeasurements(){
   const keys=['tol_bansa','tol_sadriya','tol_kamel','mohit_sadr','mohit_wasat','mohit_aradif','tol_kom','doran_saed','doran_swara','ard_katef'];
@@ -1097,7 +1051,7 @@ function getOrderMeasurements(){
 }
 
 function getOrderExtraItems(){
-  return _orderItems.filter(it=>it.name);
+  return getProductsList();
 }
 
 function syncH(gId,hId){
@@ -1136,7 +1090,9 @@ async function saveNewOrder(){
   const{error}=await sb.from('orders').insert({
     invoice_number:inv,local_invoice:document.getElementById('fLocal').value||null,
     employee:document.getElementById('fEmp').value,client,phone:document.getElementById('fPhone').value,
-    dress_type:document.getElementById('fProd').value,order_type:document.getElementById('fType').value,
+    dress_type:getProductsList().map(p=>p.name).filter(Boolean).join(' + ')||'',
+    order_type:getMainOrderType(),
+    extra_items:getProductsList(),
     order_date:document.getElementById('fODate').value,delivery_date:document.getElementById('fDDate').value,
     amount:parseFloat(document.getElementById('fAmt').value)||0,
     deposit:parseFloat(document.getElementById('fDep').value)||0,
@@ -1396,7 +1352,7 @@ function buildInv(o,label,color){
     <div class="inv-row"><span>المبلغ الكلي</span><span>${(o.amount||0).toLocaleString()} ر.س</span></div>
     ${disc>0?`<div class="inv-row disc"><span>خصم ${o.discountType==='percent'?o.discountValue+'%':''}</span><span>- ${disc.toLocaleString()} ر.س</span></div><div class="inv-row b"><span>بعد الخصم</span><span>${final.toLocaleString()} ر.س</span></div>`:''}
     <div class="inv-row"><span>العربون (${o.payMethod||''})</span><span>${(o.deposit||0).toLocaleString()} ر.س</span></div>
-    ${(o.extraItems||[]).length>0?`<hr class="inv-hr-d"><div style="font-size:10px;font-weight:700;margin-bottom:3px">البنود</div>${(o.extraItems||[]).map(item=>`<div class="inv-row"><span>${item.name}</span><span>${(item.price||0).toLocaleString()} ر.س</span></div>`).join('')}<hr class="inv-hr-d">`:``}
+    ${(o.extraItems||[]).length>0?`<hr class="inv-hr-d"><div style="font-size:10px;font-weight:700;margin-bottom:4px;color:#555">المنتجات</div>${(o.extraItems||[]).map(item=>`<div class="inv-row"><span>${item.name||''}${item.type?' ('+item.type+')':''}</span><span>${(item.price||0).toLocaleString()} ر.س</span></div>`).join('')}<hr class="inv-hr-d">`:``}
     ${(o.partials||[]).map((p,i)=>`<div class="inv-row"><span>دفعة ${i+1} (${p.method})</span><span>${(p.amount||0).toLocaleString()} ر.س</span></div>`).join('')}
     <div class="inv-row total"><span>المتبقي</span><span>${rem.toLocaleString()} ر.س</span></div>
     <hr class="inv-hr-d">
@@ -2476,12 +2432,7 @@ function openMeasurementsModal(orderId){
           <div class="fg"><label>القطعة</label><input type="text" id="m_qita" value="${m.qita||''}"></div>
           <div class="fg"><label>الأقمشة</label><input type="text" id="m_aqmisha" value="${m.aqmisha||''}"></div>
         </div>
-        <div style="border-top:1px solid rgba(201,168,76,.1);padding-top:13px;margin-top:5px">
-          <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:10px">🛍️ سلع إضافية</div>
-          <div id="extraItemsList">${extraHtml||'<div style="color:var(--gr);font-size:11px;margin-bottom:9px">لا توجد سلع إضافية</div>'}</div>
-          <button class="btn-sm" onclick="addExtraItemRow(${orderId})">+ إضافة سلعة</button>
-          ${ei.length>0?`<div style="margin-top:8px;font-size:12px;color:var(--gold)">الإجمالي الإضافي: <strong>${ei.reduce((s,i)=>s+(i.price||0),0).toLocaleString()} ر.س</strong></div>`:''}
-        </div>
+
       </div>
       <div class="m-foot">
         <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
@@ -2491,19 +2442,7 @@ function openMeasurementsModal(orderId){
   </div>`;
 }
 
-function addExtraItemRow(orderId){
-  const o=db.orders.find(x=>x.id===orderId);if(!o)return;
-  const ei=[...(o.extraItems||[]),{name:'',price:0}];
-  o.extraItems=ei;
-  openMeasurementsModal(orderId);
-}
 
-async function removeExtraItem(orderId,idx){
-  const o=db.orders.find(x=>x.id===orderId);if(!o)return;
-  o.extraItems=(o.extraItems||[]).filter((_,i)=>i!==idx);
-  await sb.from('orders').update({extra_items:o.extraItems}).eq('id',o.dbId);
-  await fetchAll();openMeasurementsModal(orderId);
-}
 
 async function saveMeasurements(orderId){
   const o=db.orders.find(x=>x.id===orderId);if(!o)return;
@@ -2963,6 +2902,88 @@ function printDeliveryInvoice(delId){
     <div class="inv-footer">تم الاستلام بتاريخ ${d.date} · ${cfg.invoiceNote||''}</div>
   </div>`;
   setTimeout(()=>{window.print();pa.style.display='none';pa.style.flexDirection='';pa.style.alignItems='';},300);
+}
+
+
+// ===== MULTI-PRODUCT =====
+let _products=[];
+
+function initProducts(){
+  _products=[];
+  addProductRow(); // start with one row
+}
+
+function addProductRow(){
+  _products.push({name:'',type:'',price:0});
+  renderProducts();
+}
+
+function renderProducts(){
+  const c=document.getElementById('productsContainer');if(!c)return;
+  const prods=(cfg.products||[]);
+  const types=(cfg.orderTypes||[]);
+  const INP='background:var(--d3);border:1px solid var(--d4);border-radius:2px;padding:7px 9px;color:var(--white);font-family:Tajawal,sans-serif;font-size:12px;outline:none;width:100%';
+  c.innerHTML=_products.map((item,i)=>`
+    <div style="display:grid;grid-template-columns:1fr 1fr 100px 32px;gap:7px;align-items:center;margin-bottom:7px;padding:9px;background:var(--d3);border-radius:2px;border:1px solid rgba(201,168,76,.1)">
+      <div>
+        <div style="font-size:10px;color:var(--gr);margin-bottom:4px">المنتج</div>
+        <select onchange="setProductName(${i},this.value)" style="${INP}">
+          <option value="">اختر...</option>
+          ${prods.map(p=>`<option value="${p}" ${item.name===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--gr);margin-bottom:4px">نوع الطلب</div>
+        <select onchange="_products[${i}].type=this.value;checkRentalMulti()" style="${INP}">
+          <option value="">اختر...</option>
+          ${types.map(t=>`<option value="${t}" ${item.type===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--gr);margin-bottom:4px">السعر (ر.س)</div>
+        <input type="number" value="${item.price||''}" placeholder="0" oninput="_products[${i}].price=parseFloat(this.value)||0;calcProductsTotal()" style="${INP}">
+      </div>
+      <button type="button" class="tag-del" style="margin-top:16px" onclick="removeProductRow(${i})">✕</button>
+    </div>`).join('');
+  calcProductsTotal();
+  checkRentalMulti();
+}
+
+function setProductName(i,val){
+  _products[i].name=val;
+  renderProducts();
+}
+
+function removeProductRow(i){
+  if(_products.length<=1){showToast('لازم منتج واحد على الأقل','error');return;}
+  _products.splice(i,1);
+  renderProducts();
+}
+
+function calcProductsTotal(){
+  const total=_products.reduce((s,p)=>s+(p.price||0),0);
+  const amtEl=document.getElementById('fAmt');
+  if(amtEl)amtEl.value=total||'';
+  const disp=document.getElementById('productsTotalDisp');
+  if(disp){
+    disp.style.display=total>0?'block':'none';
+    disp.textContent='المجموع: '+total.toLocaleString()+' ر.س';
+  }
+  calcDiscPreview();
+}
+
+function checkRentalMulti(){
+  const hasRental=_products.some(p=>p.type&&p.type.includes('ايجار'));
+  const row=document.getElementById('insRow');
+  if(row)row.style.display=hasRental?'block':'none';
+}
+
+function getProductsList(){
+  return _products.filter(p=>p.name||p.price);
+}
+
+function getMainOrderType(){
+  return _products[0]?.type||'';
 }
 
 // ===== EXPORT EXCEL =====
