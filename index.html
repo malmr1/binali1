@@ -289,6 +289,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
         <div style="display:flex;gap:8px"><button class="btn-sm" onclick="exportExcel()">📥 Excel</button></div>
       </div>
       <div id="delivAlerts"></div>
+      <div id="dailySummary"></div>
       <div class="stats-grid" id="statsGrid"></div>
       <div class="sec-hdr"><div class="sec-ttl">آخر الطلبات</div></div>
       <div class="tw"><div style="overflow-x:auto"><table><thead><tr><th>رقم المحل</th><th>رقم النظام</th><th>العميل</th><th>المنتج</th><th>موعد الاستلام</th><th>الحالة</th><th>المبلغ</th></tr></thead><tbody id="dashTbl"></tbody></table></div></div>
@@ -312,9 +313,10 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       <div id="ordersTabContent">
         <div class="tw">
           <div class="filters">
-            <input class="fi" id="orderSearch" placeholder="🔍 اسم أو #رقم أو رقم المحل..." oninput="renderOrders()">
+            <input class="fi" id="orderSearch" placeholder="🔍 اسم · جوال · #رقم نظام · م رقم محل" oninput="renderOrders()">
             <select class="fi" id="orderStatusF" onchange="renderOrders()"><option value="">كل الحالات</option></select>
             <select class="fi" id="orderTypeF" onchange="renderOrders()"><option value="">كل الأنواع</option></select>
+          <select class="fi" id="orderDraftF" onchange="renderOrders()"><option value="">الكل</option><option value="draft">مسودات فقط</option><option value="confirmed">مؤكدة فقط</option></select>
           </div>
           <div style="overflow-x:auto"><table><thead><tr>
             <th>رقم المحل</th><th>رقم النظام</th><th>الموظف</th><th>العميل</th>
@@ -337,7 +339,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
             <input type="date" class="fi" id="delTo" onchange="renderDeliveries()">
           </div>
           <div style="overflow-x:auto"><table><thead><tr>
-            <th>رقم الفاتورة (المحل)</th><th>اسم العميل</th><th>القيمة الأصلية</th><th>المبلغ المستلم</th><th>طريقة الدفع</th><th>التاريخ</th><th>بواسطة</th><th>إجراءات</th>
+            <th>رقم الفاتورة (المحل)</th><th>اسم العميل</th><th>القيمة الأصلية</th><th>المبلغ المستلم</th><th>طريقة الدفع</th><th>التاريخ</th><th>بواسطة</th><th>تأمين</th><th>إجراءات</th>
           </tr></thead><tbody id="delTbl"></tbody></table></div>
         </div>
       </div>
@@ -594,14 +596,15 @@ async function fetchAll(){
     insurance:x.insurance||0,insuranceReturned:x.insurance_returned,insuranceReturnDate:x.insurance_return_date,
     status:x.status,notes:x.notes,tracking:x.tracking||[],
     discountType:x.discount_type||'none',discountValue:x.discount_value||0,
-    returned:x.returned||false,returnDate:x.return_date,returnAmount:x.return_amount||0,returnNotes:x.return_notes,
+    returned:x.returned||false,returnDate:x.return_date,returnAmount:x.return_amount||0,returnNotes:x.return_notes,isDraft:x.is_draft||false,
     measurements:x.measurements||{},extraItems:x.extra_items||[],
+    insuranceCollectTime:x.insurance_collect_time||'order',insuranceCollectOther:x.insurance_collect_other||'',
   }));
   db.expenses=(e.data||[]).map(x=>({id:x.id,date:x.date,catMain:x.cat_main,catSub:x.cat_sub,description:x.description,amount:x.amount||0,employeeId:x.employee_id}));
   db.attendance=(a.data||[]).map(x=>({id:x.id,userId:x.user_id,userName:x.user_name,shift:x.shift,date:x.date,checkin:x.checkin_time,checkout:x.checkout_time,duration:x.duration_minutes}));
   db.salaries=(s.data||[]).map(x=>({id:x.id,empId:x.employee_id,empName:x.employee_name,type:x.type,amount:x.amount||0,baseSalary:x.base_salary||0,month:x.month,date:x.date,notes:x.notes,createdBy:x.created_by}));
   db.returns=(r.data||[]).map(x=>({id:x.id,orderId:x.order_id,invoiceNum:x.invoice_number,client:x.client,type:x.type,amount:x.amount||0,date:x.date,notes:x.notes,createdBy:x.created_by}));
-  db.deliveries=(dlv.data||[]).map(x=>({id:x.id,localInvoice:x.local_invoice,client:x.client,originalAmount:x.original_amount||0,receivedAmount:x.received_amount||0,payMethod:x.pay_method,date:x.date,createdBy:x.created_by}));
+  db.deliveries=(dlv.data||[]).map(x=>({id:x.id,localInvoice:x.local_invoice,client:x.client,originalAmount:x.original_amount||0,receivedAmount:x.received_amount||0,payMethod:x.pay_method,date:x.date,createdBy:x.created_by,insuranceAmount:x.insurance_amount||0,insuranceStatus:x.insurance_status||''}));
   db.audit=(au.data||[]).map(x=>({id:x.id,userName:x.user_name,action:x.action,table:x.table_name,recordId:x.record_id,details:x.details,at:x.created_at}));
   nextInvoice=db.orders.reduce((m,o)=>Math.max(m,o.id||0),99)+1;
 }
@@ -853,19 +856,42 @@ function checkDelivAlerts(){
 
 // ===== DASHBOARD =====
 function renderDashboard(){
-  const total=db.orders.length;
-  const pending=db.orders.filter(o=>o.status==='قيد التنفيذ').length;
+  const today=new Date().toISOString().split('T')[0];
+  const total=db.orders.filter(o=>!o.isDraft).length;
+  const drafts=db.orders.filter(o=>o.isDraft).length;
+  const pending=db.orders.filter(o=>o.status==='قيد التنفيذ'&&!o.isDraft).length;
   const deliv=db.orders.filter(o=>o.status==='تم التسليم').length;
-  const uncollected=db.orders.filter(o=>!['تم التسليم','الحمدلله'].includes(o.status)).reduce((s,o)=>s+Math.max(0,calcRem(o)),0);
-  const totalSales=db.orders.reduce((s,o)=>s+calcFinal(o),0);
-  const collected=db.orders.reduce((s,o)=>s+calcPaid(o),0);
+  const uncollected=db.orders.filter(o=>!['تم التسليم','الحمدلله'].includes(o.status)&&!o.isDraft).reduce((s,o)=>s+Math.max(0,calcRem(o)),0);
+  const totalSales=db.orders.filter(o=>!o.isDraft).reduce((s,o)=>s+calcFinal(o),0);
+  // Today stats
+  const todayOrders=db.orders.filter(o=>o.orderDate===today&&!o.isDraft);
+  const todayPayments=db.orders.reduce((s,o)=>{
+    return s+(o.partials||[]).filter(p=>p.date===today).reduce((ss,p)=>ss+(p.amount||0),0);
+  },0)+(db.orders.filter(o=>o.orderDate===today&&!o.isDraft).reduce((s,o)=>s+(o.deposit||0),0));
+  const todayExpenses=db.expenses.filter(e=>e.date===today).reduce((s,e)=>s+(e.amount||0),0);
+  // Unreturned insurance
+  const unretIns=db.orders.filter(o=>o.insurance>0&&!o.insuranceReturned&&o.status==='تم التسليم');
   document.getElementById('statsGrid').innerHTML=`
-    <div class="stat-card sc-gold"><div class="s-lbl">إجمالي الطلبات</div><div class="s-val">${total}</div><div class="s-icon">👗</div></div>
+    <div class="stat-card sc-gold"><div class="s-lbl">إجمالي الطلبات</div><div class="s-val">${total}</div>${drafts>0?`<div class="s-sub">${drafts} مسودة</div>`:''}<div class="s-icon">👗</div></div>
     <div class="stat-card sc-red"><div class="s-lbl">قيد التنفيذ</div><div class="s-val">${pending}</div><div class="s-icon">⏳</div></div>
     <div class="stat-card sc-green"><div class="s-lbl">تم التسليم</div><div class="s-val">${deliv}</div><div class="s-icon">✅</div></div>
     <div class="stat-card sc-blue"><div class="s-lbl">إجمالي المبيعات</div><div class="s-val">${totalSales.toLocaleString()}</div><div class="s-sub">ريال</div><div class="s-icon">📊</div></div>
     <div class="stat-card sc-orange"><div class="s-lbl">متبقي غير محصل</div><div class="s-val">${uncollected.toLocaleString()}</div><div class="s-sub">ريال</div><div class="s-icon">💰</div></div>
   `;
+  // Daily summary
+  const dailyEl=document.getElementById('dailySummary');
+  if(dailyEl){
+    dailyEl.innerHTML=`
+    <div style="background:var(--d2);border:1px solid rgba(201,168,76,.15);border-radius:2px;padding:14px;margin-bottom:18px">
+      <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:11px;letter-spacing:1px">📅 ملخص اليوم</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        <div style="text-align:center"><div style="font-size:10px;color:var(--gr);margin-bottom:4px">طلبات اليوم</div><div style="font-size:20px;font-weight:800;color:var(--blue)">${todayOrders.length}</div></div>
+        <div style="text-align:center"><div style="font-size:10px;color:var(--gr);margin-bottom:4px">تحصيلات اليوم</div><div style="font-size:20px;font-weight:800;color:var(--green)">${todayPayments.toLocaleString()}</div><div style="font-size:9px;color:var(--gr)">ر.س</div></div>
+        <div style="text-align:center"><div style="font-size:10px;color:var(--gr);margin-bottom:4px">مصروفات اليوم</div><div style="font-size:20px;font-weight:800;color:var(--red)">${todayExpenses.toLocaleString()}</div><div style="font-size:9px;color:var(--gr)">ر.س</div></div>
+        <div style="text-align:center;cursor:pointer" onclick="switchPage('orders')"><div style="font-size:10px;color:var(--gr);margin-bottom:4px">تأمين غير مسترد</div><div style="font-size:20px;font-weight:800;color:${unretIns.length>0?'var(--orange)':'var(--green)'}">${unretIns.length}</div><div style="font-size:9px;color:var(--gr)">طلب</div></div>
+      </div>
+    </div>`;
+  }
   document.getElementById('dashTbl').innerHTML=[...db.orders].slice(0,10).map(o=>{
     const h=(o.tracking||[]).slice(-1)[0];
     return`<tr>
@@ -879,6 +905,12 @@ function renderDashboard(){
     </tr>`;
   }).join('');
   checkDelivAlerts();
+  // Insurance alert
+  const unretInsAlert=db.orders.filter(o=>o.insurance>0&&!o.insuranceReturned&&o.status==='تم التسليم');
+  if(unretInsAlert.length>0){
+    const el=document.getElementById('delivAlerts');
+    if(el)el.innerHTML+='<div class="a-warn" style="margin-top:7px">🛡️ '+unretInsAlert.length+' طلب تم تسليمه ولم يُسترد تأمينه بعد!</div>';
+  }
 }
 
 // ===== ORDERS =====
@@ -886,11 +918,29 @@ function renderOrders(){
   const search=(document.getElementById('orderSearch')?.value||'').toLowerCase().replace('#','');
   const stF=document.getElementById('orderStatusF')?.value||'';
   const tyF=document.getElementById('orderTypeF')?.value||'';
+  const draftF=document.getElementById('orderDraftF')?.value||'';
   const canAdd=currentUser.role==='manager'||currentUser.role==='staff'||canDo('canAddOrder');
   document.getElementById('btnAddOrder').style.display=canAdd?'inline-flex':'none';
   let list=db.orders.filter(o=>{
-    const ms=!search||o.client?.toLowerCase().includes(search)||String(o.id).includes(search)||String(o.localInvoice||'').includes(search);
-    return ms&&(!stF||o.status===stF)&&(!tyF||o.orderType===tyF);
+    let ms=false;
+    if(!search){ms=true;}
+    else if(search.startsWith('#')){
+      // Search by system invoice number
+      const num=search.slice(1);
+      ms=String(o.id).includes(num);
+    }else if(search.startsWith('م')){
+      // Search by local (shop) invoice number
+      const num=search.slice(1);
+      ms=String(o.localInvoice||'').includes(num);
+    }else{
+      // Search by name, phone, or both invoice numbers
+      ms=o.client?.toLowerCase().includes(search)||
+         o.phone?.includes(search)||
+         String(o.id).includes(search)||
+         String(o.localInvoice||'').toLowerCase().includes(search);
+    }
+    const draftMatch=!draftF||(draftF==='draft'&&o.isDraft)||(draftF==='confirmed'&&!o.isDraft);
+    return ms&&(!stF||o.status===stF)&&(!tyF||o.orderType===tyF)&&draftMatch;
   });
   const canDel=currentUser.role==='manager';
   document.getElementById('ordersTbl').innerHTML=list.map(o=>{
@@ -899,7 +949,7 @@ function renderOrders(){
       <td style="color:var(--gr)">${o.localInvoice||'-'}</td>
       <td><strong style="color:var(--gold);cursor:pointer" onclick="showQR(${o.id})">#${o.id} 🔳</strong></td>
       <td>${o.employee||'-'}</td>
-      <td><div style="font-weight:600">${o.client}${o.returned?` <span class="badge b-red">مرتجع</span>`:''}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
+      <td><div style="font-weight:600">${o.client}${o.returned?` <span class="badge b-red">مرتجع</span>`:''} ${o.isDraft?'<span class="badge b-gray">مسودة</span>":''}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
       <td>${o.dressType}</td><td>${o.orderType}</td>
       <td>${o.deliveryDate}<div style="font-size:9px;color:var(--gr)">${toHijri(o.deliveryDate)}</div></td>
       <td>${(o.amount||0).toLocaleString()}${disc>0?`<div style="font-size:10px;color:var(--red)">خصم:${disc.toLocaleString()}</div>`:''}<div style="font-size:10px;color:var(--gold)">صافي:${calcFinal(o).toLocaleString()}</div></td>
@@ -907,7 +957,7 @@ function renderOrders(){
       <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         <button class="btn-sm" onclick="showTracking(${o.id})">تتبع</button>
-        <button class="btn-sm blue" onclick="openOrderActions(${o.id})">إجراءات</button>
+        ${o.isDraft?`<button class="btn-sm green" onclick="confirmDraft(${o.id})">✅ تأكيد</button>`:`<button class="btn-sm blue" onclick="openOrderActions(${o.id})">إجراءات</button>`}
         <button class="btn-sm green" onclick="printInvoice(${o.id})">🖨️ فاتورة</button>
         <button class="btn-sm" onclick="printMeasurements(${o.id})">📐 مقاسات</button>
         <button class="btn-sm" onclick="printPayInvoice(${o.id})">إيصال</button>
@@ -1015,7 +1065,8 @@ function openOrderModal(){
       </div>
       <div class="m-foot">
         <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
-        <button class="btn-primary" style="width:auto;padding:9px 24px" onclick="saveNewOrder()">حفظ الطلب</button>
+        <button class="btn-add" style="background:var(--d3);color:var(--gr);border:1px solid var(--d4)" onclick="saveNewOrder(true)">📋 مسودة</button>
+        <button class="btn-primary" style="width:auto;padding:9px 24px" onclick="saveNewOrder(false)">حفظ الطلب</button>
       </div>
     </div>
   </div>`;
@@ -1081,12 +1132,12 @@ function calcDiscPreview(){
   prev.innerHTML=`${amt.toLocaleString()} − خصم ${disc.toLocaleString()} = <strong>صافي: ${(amt-disc).toLocaleString()} ر.س</strong>`;
 }
 
-async function saveNewOrder(){
+async function saveNewOrder(isDraft=false){
   const client=document.getElementById('fClient').value.trim();
   if(!client){showToast('أدخل اسم العميلة','error');return;}
-  const inv=nextInvoice++;
-  const tracking=[{step:'استلام الطلب',sub:'',who:currentUser.name,when:new Date().toLocaleString('ar-SA')}];
-  showLoading('جاري الحفظ...');
+  const inv=isDraft?0:nextInvoice++;
+  const tracking=isDraft?[]:[{step:'استلام الطلب',sub:'',who:currentUser.name,when:new Date().toLocaleString('ar-SA')}];
+  showLoading(isDraft?'جاري حفظ المسودة...':'جاري الحفظ...');
   const{error}=await sb.from('orders').insert({
     invoice_number:inv,local_invoice:document.getElementById('fLocal').value||null,
     employee:document.getElementById('fEmp').value,client,phone:document.getElementById('fPhone').value,
@@ -1103,14 +1154,14 @@ async function saveNewOrder(){
     tracking,partial_payments:[],
     discount_type:document.getElementById('fDiscType')?.value||'none',
     discount_value:parseFloat(document.getElementById('fDiscVal')?.value)||0,
-    returned:false,
+    returned:false,is_draft:isDraft,
     measurements:getOrderMeasurements(),
     extra_items:getOrderExtraItems(),
   });
   if(error){hideLoading();showToast('خطأ: '+error.message,'error');return;}
   await logAudit('إضافة طلب','orders',inv,`طلب جديد: ${client}`);
   await fetchAll();hideLoading();closeModal();renderOrders();
-  showToast(`✅ تم إنشاء الطلب #${inv}`,'success');
+  showToast(isDraft?'✅ تم حفظ المسودة':'`✅ تم إنشاء الطلب #${inv}`','success');
 }
 
 function openOrderActions(orderId){
@@ -1119,7 +1170,10 @@ function openOrderActions(orderId){
   const canEditDel=currentUser.role==='manager'||canDo('canEditDelivery');
   const partials=(o.partials||[]).map((p,i)=>`
     <div style="display:flex;justify-content:space-between;background:var(--d4);padding:6px 9px;border-radius:2px;margin-bottom:4px;font-size:11px">
-      <span>دفعة ${i+1}</span><span style="font-weight:700">${(p.amount||0).toLocaleString()} ر.س</span><span>${p.date||''}</span><span>${p.method||''}</span>
+      <span>دفعة ${i+1}</span>
+      <span style="font-weight:700">${(p.amount||0).toLocaleString()} ر.س</span>
+      <span>${p.date||''}</span>
+      <span>${p.method==='مختلط'?`نقدي: ${(p.cash||0).toLocaleString()} + شبكة: ${(p.card||0).toLocaleString()}`:p.method||''}</span>
     </div>`).join('');
   document.getElementById('MC').innerHTML=`
   <div class="overlay" onclick="if(event.target===this)closeModal()">
@@ -1130,11 +1184,23 @@ function openOrderActions(orderId){
         <div class="section-box">
           <div class="section-box-ttl">💰 الدفعات — المبلغ: ${calcFinal(o).toLocaleString()} | محصّل: ${calcPaid(o).toLocaleString()} | <span style="color:${calcRem(o)>0?'var(--red)':'var(--green)'}">متبقي: ${calcRem(o).toLocaleString()} ر.س</span></div>
           ${partials}
-          <div class="frow" style="margin-top:9px">
-            <div class="fg"><label>المبلغ</label><input type="number" id="pAmt" placeholder="0"></div>
-            <div class="fg"><label>التاريخ</label><input type="date" id="pDate" value="${new Date().toISOString().split('T')[0]}"></div>
-            <div class="fg"><label>طريقة الدفع</label><select id="pMeth">${pays}</select></div>
-            <button class="btn-add" style="margin-bottom:2px" onclick="addPartial(${orderId})">+ إضافة</button>
+          <div style="margin-top:10px">
+            <div class="frow" style="margin-bottom:8px">
+              <div class="fg"><label>المبلغ الكلي</label><input type="number" id="pAmt" placeholder="0" oninput="calcSplitTotal()"></div>
+              <div class="fg"><label>التاريخ</label><input type="date" id="pDate" value="${new Date().toISOString().split('T')[0]}"></div>
+            </div>
+            <div class="fg" style="margin-bottom:8px">
+              <label>طريقة الدفع</label>
+              <select id="pMeth" onchange="toggleSplitPayment(this.value)">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
+            </div>
+            <div id="splitPayRow" style="display:none;background:var(--d4);padding:10px;border-radius:2px;margin-bottom:8px">
+              <div class="frow">
+                <div class="fg"><label>نقدي (ر.س)</label><input type="number" id="pCash" placeholder="0" oninput="calcSplitTotal()"></div>
+                <div class="fg"><label>شبكة (ر.س)</label><input type="number" id="pCard" placeholder="0" oninput="calcSplitTotal()"></div>
+              </div>
+              <div id="splitTotal" style="font-size:11px;color:var(--gold);margin-top:5px"></div>
+            </div>
+            <button class="btn-add" onclick="addPartial(${orderId})">+ إضافة الدفعة</button>
           </div>
         </div>
         ${o.insurance>0?`
@@ -1165,21 +1231,38 @@ function openOrderActions(orderId){
 async function addPartial(oid){
   const amt=parseFloat(document.getElementById('pAmt').value)||0;
   if(!amt){showToast('أدخل المبلغ','error');return;}
+  const method=document.getElementById('pMeth').value;
   const o=db.orders.find(x=>x.id===oid);
-  const ps=[...(o.partials||[]),{amount:amt,date:document.getElementById('pDate').value,method:document.getElementById('pMeth').value}];
+  let payDetail={amount:amt,date:document.getElementById('pDate').value,method};
+  if(method==='__split__'){
+    const cash=parseFloat(document.getElementById('pCash').value)||0;
+    const card=parseFloat(document.getElementById('pCard').value)||0;
+    payDetail.method='مختلط';
+    payDetail.cash=cash;
+    payDetail.card=card;
+    payDetail.amount=cash+card;
+  }
+  const ps=[...(o.partials||[]),payDetail];
   showLoading('جاري الحفظ...');
   await sb.from('orders').update({partial_payments:ps}).eq('id',o.dbId);
-  await logAudit('دفعة جديدة','orders',oid,`${amt.toLocaleString()} ر.س`);
+  await logAudit('دفعة جديدة','orders',oid,`${payDetail.amount.toLocaleString()} ر.س - ${payDetail.method}`);
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('تمت الدفعة ✓','success');
 }
 
 async function saveInsurance(oid){
   const ret=document.getElementById('insRet').value==='true';
   const dt=document.getElementById('insRetDate').value||null;
+  const collectTime=document.getElementById('insCollectTime')?.value||'order';
+  const collectOther=document.getElementById('insCollectOther')?.value||'';
   const o=db.orders.find(x=>x.id===oid);
   showLoading('...');
-  await sb.from('orders').update({insurance_returned:ret,insurance_return_date:dt}).eq('id',o.dbId);
-  await logAudit('تحديث تأمين','orders',oid,`مسترد:${ret}`);
+  await sb.from('orders').update({
+    insurance_returned:ret,
+    insurance_return_date:dt,
+    insurance_collect_time:collectTime,
+    insurance_collect_other:collectOther,
+  }).eq('id',o.dbId);
+  await logAudit('تحديث تأمين','orders',oid,`مسترد:${ret} - وقت التحصيل:${collectTime}`);
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('تم ✓','success');
 }
 
@@ -2349,6 +2432,7 @@ function renderDeliveries(){
       <td><span class="badge b-gold">${d.payMethod||'-'}</span></td>
       <td>${d.date||''}</td>
       <td style="color:var(--gr);font-size:10px">${d.createdBy||''}</td>
+      <td>${d.insuranceAmount>0?`<span class="badge ${d.insuranceStatus==='returned'?'b-green':d.insuranceStatus==='collected'?'b-blue':'b-orange'}">${d.insuranceAmount.toLocaleString()} ر.س</span>`:'<span style="color:var(--gr)">-</span>'}</td>
       <td><div style="display:flex;gap:4px">
         <button class="btn-sm green" onclick="printDeliveryInvoice(${d.id})">فاتورة</button>
         ${canEdit?`<button class="btn-sm blue" onclick="openEditDelivery(${d.id})">تعديل</button>`:''}
@@ -2375,6 +2459,19 @@ function openDeliveryModal(){
         <div class="fg"><label>المبلغ المستلم (ر.س)</label><input type="number" id="dAmt"></div>
         <div class="fg"><label>طريقة الدفع</label><select id="dPay">${pays}</select></div>
         <div class="fg"><label>التاريخ</label><input type="date" id="dDate" value="${new Date().toISOString().split('T')[0]}"></div>
+        <div style="border-top:1px solid rgba(201,168,76,.1);padding-top:12px;margin-top:4px">
+          <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:9px">🛡️ التأمين (اختياري)</div>
+          <div class="fgrid">
+            <div class="fg"><label>مبلغ التأمين (ر.س)</label><input type="number" id="dIns" value="0" placeholder="0"></div>
+            <div class="fg"><label>حالة التأمين</label>
+              <select id="dInsStatus">
+                <option value="pending">لم يُحصَّل بعد</option>
+                <option value="collected">تم التحصيل</option>
+                <option value="returned">تم الاسترداد</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="m-foot">
         <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
@@ -2390,6 +2487,8 @@ async function saveDelivery2(){
   const amt=parseFloat(document.getElementById('dAmt').value)||0;
   const date=document.getElementById('dDate').value;
   showLoading('جاري الحفظ...');
+  const insAmt=parseFloat(document.getElementById('dIns').value)||0;
+  const insStatus=document.getElementById('dInsStatus').value;
   await sb.from('deliveries').insert({
     local_invoice:document.getElementById('dInv').value||null,
     client,
@@ -2398,6 +2497,8 @@ async function saveDelivery2(){
     pay_method:document.getElementById('dPay').value,
     date,
     created_by:currentUser.name,
+    insurance_amount:insAmt,
+    insurance_status:insStatus,
   });
   await logAudit('تسليم جديد','',`${client} - ${amt.toLocaleString()} ر.س`);
   await fetchAll();hideLoading();closeModal();renderDeliveries();
@@ -2984,6 +3085,41 @@ function getProductsList(){
 
 function getMainOrderType(){
   return _products[0]?.type||'';
+}
+
+
+function toggleSplitPayment(val){
+  const row=document.getElementById('splitPayRow');
+  if(row)row.style.display=val==='__split__'?'block':'none';
+}
+
+function calcSplitTotal(){
+  const cash=parseFloat(document.getElementById('pCash')?.value)||0;
+  const card=parseFloat(document.getElementById('pCard')?.value)||0;
+  const total=cash+card;
+  const el=document.getElementById('splitTotal');
+  if(el)el.textContent=`الإجمالي: ${total.toLocaleString()} ر.س`;
+  // Auto-fill total amount
+  const amtEl=document.getElementById('pAmt');
+  if(amtEl&&(cash||card))amtEl.value=total||'';
+}
+
+
+async function confirmDraft(orderId){
+  if(!confirm('تحويل المسودة لطلب رسمي؟'))return;
+  const o=db.orders.find(x=>x.id===orderId);if(!o)return;
+  const inv=nextInvoice++;
+  const tracking=[{step:'استلام الطلب',sub:'',who:currentUser.name,when:new Date().toLocaleString('ar-SA')}];
+  showLoading('جاري التأكيد...');
+  await sb.from('orders').update({
+    invoice_number:inv,
+    is_draft:false,
+    status:'استلام الطلب',
+    tracking,
+  }).eq('id',o.dbId);
+  await logAudit('تأكيد مسودة','orders',inv,`${o.client} → طلب #${inv}`);
+  await fetchAll();hideLoading();renderOrders();
+  showToast(`✅ تم تأكيد الطلب #${inv}`,'success');
 }
 
 // ===== EXPORT EXCEL =====
