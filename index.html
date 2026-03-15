@@ -337,7 +337,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
             <input type="date" class="fi" id="delTo" onchange="renderDeliveries()">
           </div>
           <div style="overflow-x:auto"><table><thead><tr>
-            <th>رقم الفاتورة (المحل)</th><th>اسم العميل</th><th>القيمة الأصلية</th><th>المبلغ المستلم</th><th>طريقة الدفع</th><th>التاريخ</th><th>بواسطة</th>
+            <th>رقم الفاتورة (المحل)</th><th>اسم العميل</th><th>القيمة الأصلية</th><th>المبلغ المستلم</th><th>طريقة الدفع</th><th>التاريخ</th><th>بواسطة</th><th>إجراءات</th>
           </tr></thead><tbody id="delTbl"></tbody></table></div>
         </div>
       </div>
@@ -946,21 +946,18 @@ function openOrderModal(){
           </div>
           <div class="fg">
             <label>تاريخ الطلب (هـ)</label>
+            <input type="text" id="fODateH" readonly style="color:var(--gold);background:var(--d3);border:1px solid var(--d4);border-radius:2px;padding:10px 12px;font-family:Tajawal,sans-serif;font-size:13px;width:100%;outline:none" placeholder="يتعبأ تلقائياً">
+          </div>
+          <div class="fg">
+            <label>موعد الاستلام (هـ) <span style="font-size:10px;color:var(--gold)">← اضغط لاختيار</span></label>
             <div style="position:relative">
-              <input type="text" id="fODateH" readonly placeholder="اضغط لاختيار هجري" style="color:var(--gold);cursor:pointer;width:100%;background:var(--d3);border:1px solid var(--d4);border-radius:2px;padding:10px 12px;font-family:Tajawal,sans-serif;font-size:13px;outline:none" onclick="openHijriPicker((g,h)=>{document.getElementById('fODate').value=g;document.getElementById('fODateH').value=h;})">
-              <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none">📅</span>
+              <input type="text" id="fDDateH" readonly placeholder="اضغط لاختيار التاريخ الهجري" style="color:var(--gold);cursor:pointer;width:100%;background:var(--d3);border:1px solid rgba(201,168,76,.4);border-radius:2px;padding:10px 12px;padding-left:36px;font-family:Tajawal,sans-serif;font-size:13px;outline:none" onclick="openHijriPicker((g,h)=>{document.getElementById('fDDate').value=g;document.getElementById('fDDateH').value=h;})">
+              <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:16px">📅</span>
             </div>
           </div>
           <div class="fg">
             <label>موعد الاستلام (م)</label>
-            <input type="date" id="fDDate" oninput="syncH('fDDate','fDDateH')">
-          </div>
-          <div class="fg">
-            <label>موعد الاستلام (هـ)</label>
-            <div style="position:relative">
-              <input type="text" id="fDDateH" readonly placeholder="اضغط لاختيار هجري" style="color:var(--gold);cursor:pointer;width:100%;background:var(--d3);border:1px solid var(--d4);border-radius:2px;padding:10px 12px;font-family:Tajawal,sans-serif;font-size:13px;outline:none" onclick="openHijriPicker((g,h)=>{document.getElementById('fDDate').value=g;document.getElementById('fDDateH').value=h;})">
-              <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none">📅</span>
-            </div>
+            <input type="date" id="fDDate" oninput="syncH('fDDate','fDDateH')" readonly style="color:var(--gr);background:var(--d3);border:1px solid var(--d4);border-radius:2px;padding:10px 12px;font-family:Tajawal,sans-serif;font-size:13px;width:100%;outline:none">
           </div>
 
           <div class="fg"><label>المبلغ الكلي (ر.س) <span style="font-size:9px;color:var(--gr)">يتعبأ من البنود</span></label><input type="number" id="fAmt" oninput="calcDiscPreview()" placeholder="0" readonly style="color:var(--gold);cursor:default"></div>
@@ -2311,7 +2308,7 @@ function openCustomRoleModal(){
         </div>
         <div class="fg" style="margin-top:10px"><label>إضافة صلاحيات خاصة</label>
           <div style="display:grid;gap:6px;margin-top:6px">
-            ${[{id:'canAddOrder',label:'إضافة طلبات'},{id:'canEditDelivery',label:'تعديل موعد الاستلام'},{id:'canUpdateTracking',label:'تحديث التتبع'},{id:'canAddDelivery',label:'إدخال التسليمات'},{id:'canViewMeasurements',label:'رؤية المقاسات'},{id:'canViewInvoiceAmount',label:'رؤية الفاتورة بالمبلغ'}].map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="crperm-${p.id}" style="width:auto"> ${p.label}</label>`).join('')}
+            ${[{id:'canAddOrder',label:'إضافة طلبات'},{id:'canEditDelivery',label:'تعديل موعد الاستلام'},{id:'canUpdateTracking',label:'تحديث التتبع'},{id:'canAddDelivery',label:'إدخال التسليمات'},{id:'canEditDeliveryRecord',label:'تعديل التسليمات'},{id:'canViewMeasurements',label:'رؤية المقاسات'},{id:'canViewInvoiceAmount',label:'رؤية الفاتورة بالمبلغ'}].map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="crperm-${p.id}" style="width:auto"> ${p.label}</label>`).join('')}
           </div>
         </div>
       </div>
@@ -2386,6 +2383,7 @@ function renderDeliveries(){
   if(from)list=list.filter(d=>d.date>=from);
   if(to)list=list.filter(d=>d.date<=to);
   const total=list.reduce((s,d)=>s+(d.receivedAmount||0),0);
+  const canEdit=currentUser.role==='manager'||canDo('canEditDelivery');
   document.getElementById('delTbl').innerHTML=[
     ...list.map(d=>`<tr>
       <td style="color:var(--gr)">${d.localInvoice||'-'}</td>
@@ -2395,13 +2393,17 @@ function renderDeliveries(){
       <td><span class="badge b-gold">${d.payMethod||'-'}</span></td>
       <td>${d.date||''}</td>
       <td style="color:var(--gr);font-size:10px">${d.createdBy||''}</td>
+      <td><div style="display:flex;gap:4px">
+        <button class="btn-sm green" onclick="printDeliveryInvoice(${d.id})">فاتورة</button>
+        ${canEdit?`<button class="btn-sm blue" onclick="openEditDelivery(${d.id})">تعديل</button>`:''}
+      </div></td>
     </tr>`),
     `<tr style="background:rgba(201,168,76,.05)">
-      <td colspan="3" style="font-weight:700;color:var(--gold)">الإجمالي</td>
+      <td colspan="4" style="font-weight:700;color:var(--gold)">الإجمالي</td>
       <td style="font-weight:900;color:var(--green)">${total.toLocaleString()} ر.س</td>
       <td colspan="3"></td>
     </tr>`
-  ].join('')||'<tr><td colspan="7" style="text-align:center;padding:22px;color:var(--gr)">لا توجد تسليمات</td></tr>';
+  ].join('')||'<tr><td colspan="8" style="text-align:center;padding:22px;color:var(--gr)">لا توجد تسليمات</td></tr>';
 }
 
 function openDeliveryModal(){
@@ -2774,19 +2776,20 @@ function getHijriFirstWeekday(year,month){
 
 function hijriToGreg(hy,hm,hd){
   try{
-    // Approximate conversion using epoch
-    const N=hd+Math.ceil(29.5001*(hm-1))+((hy-1)*354)+Math.floor((3+(11*hy))/30)-385;
-    const jd=N+1948439.5;
-    const l=Math.floor(jd)+68569;
-    const n=Math.floor((4*l)/146097);
-    const ll=l-Math.floor((146097*n+3)/4);
-    const i=Math.floor((4000*(ll+1))/1461001);
-    const lll=ll-Math.floor((1461*i)/4)+31;
-    const j=Math.floor((80*lll)/2447);
-    const day=lll-Math.floor((2447*j)/80);
-    const jj=Math.floor(j/11);
-    const month=j+2-12*jj;
-    const year=100*(n-49)+i+jj;
+    // Accurate Hijri to Gregorian conversion
+    // Using Julian Day Number method
+    const jd=Math.trunc((11*hy+3)/30)+354*hy+30*hm-Math.trunc((hm-1)/2)+hd+1948440-385;
+    // Convert JD to Gregorian
+    let l=jd+68569;
+    const n=Math.trunc((4*l)/146097);
+    l=l-Math.trunc((146097*n+3)/4);
+    const i=Math.trunc((4000*(l+1))/1461001);
+    l=l-Math.trunc((1461*i)/4)+31;
+    const j=Math.trunc((80*l)/2447);
+    const day=l-Math.trunc((2447*j)/80);
+    l=Math.trunc(j/11);
+    const month=j+2-12*l;
+    const year=100*(n-49)+i+l;
     return`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
   }catch(e){return'';}
 }
@@ -2897,6 +2900,69 @@ async function doFormat(){
     hideLoading();
     showToast('خطأ: '+e.message,'error');
   }
+}
+
+
+// ===== DELIVERY EDIT & INVOICE =====
+function openEditDelivery(delId){
+  const d=db.deliveries.find(x=>x.id===delId);if(!d)return;
+  const pays=(cfg.payMethods||[]).map(t=>`<option ${d.payMethod===t?'selected':''}>${t}</option>`).join('');
+  document.getElementById('MC').innerHTML=`
+  <div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal modal-sm">
+      <div class="m-hdr"><div class="m-ttl">تعديل تسليم</div><button class="m-close" onclick="closeModal()">×</button></div>
+      <div class="m-body">
+        <div class="fg"><label>اسم العميل</label><input type="text" id="edClient" value="${d.client}"></div>
+        <div class="fg"><label>رقم الفاتورة في المحل</label><input type="text" id="edInv" value="${d.localInvoice||''}"></div>
+        <div class="fg"><label>القيمة الأصلية (ر.س)</label><input type="number" id="edOrig" value="${d.originalAmount||0}"></div>
+        <div class="fg"><label>المبلغ المستلم (ر.س)</label><input type="number" id="edAmt" value="${d.receivedAmount||0}"></div>
+        <div class="fg"><label>طريقة الدفع</label><select id="edPay">${pays}</select></div>
+        <div class="fg"><label>التاريخ</label><input type="date" id="edDate" value="${d.date}"></div>
+      </div>
+      <div class="m-foot">
+        <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveEditDelivery(${delId})">حفظ</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveEditDelivery(delId){
+  const d=db.deliveries.find(x=>x.id===delId);if(!d)return;
+  showLoading('جاري الحفظ...');
+  await sb.from('deliveries').update({
+    client:document.getElementById('edClient').value,
+    local_invoice:document.getElementById('edInv').value||null,
+    original_amount:parseFloat(document.getElementById('edOrig').value)||0,
+    received_amount:parseFloat(document.getElementById('edAmt').value)||0,
+    pay_method:document.getElementById('edPay').value,
+    date:document.getElementById('edDate').value,
+  }).eq('id',delId);
+  await logAudit('تعديل تسليم','deliveries',delId,d.client);
+  await fetchAll();hideLoading();closeModal();renderDeliveries();
+  showToast('تم التعديل ✓','success');
+}
+
+function printDeliveryInvoice(delId){
+  const d=db.deliveries.find(x=>x.id===delId);if(!d)return;
+  const pa=document.getElementById('printArea');
+  pa.style.display='flex';pa.style.flexDirection='column';pa.style.alignItems='center';
+  pa.innerHTML=`<div class="inv-wrap">
+    <div class="inv-copy" style="border-color:#27AE60;color:#27AE60">فاتورة تسليم</div>
+    <div class="inv-brand">${cfg.shopName||'بن علي'}</div>
+    <div class="inv-sub">${cfg.shopPhone||''} ${cfg.shopAddress?'· '+cfg.shopAddress:''}</div>
+    <hr class="inv-hr">
+    <div class="inv-row"><span>رقم الفاتورة</span><span style="font-weight:900">${d.localInvoice||'-'}</span></div>
+    <div class="inv-row"><span>التاريخ</span><span>${d.date}</span></div>
+    <div class="inv-row b"><span>العميلة</span><span>${d.client}</span></div>
+    <hr class="inv-hr-d">
+    <div class="inv-row"><span>القيمة الأصلية</span><span>${(d.originalAmount||0).toLocaleString()} ر.س</span></div>
+    <div class="inv-row total" style="color:#27AE60"><span>المبلغ المستلم</span><span>${(d.receivedAmount||0).toLocaleString()} ر.س</span></div>
+    <div class="inv-row"><span>طريقة الدفع</span><span>${d.payMethod||'-'}</span></div>
+    <hr class="inv-hr-d">
+    <div class="inv-footer">تم الاستلام بتاريخ ${d.date} · ${cfg.invoiceNote||''}</div>
+  </div>`;
+  setTimeout(()=>{window.print();pa.style.display='none';pa.style.flexDirection='';pa.style.alignItems='';},300);
 }
 
 // ===== EXPORT EXCEL =====
