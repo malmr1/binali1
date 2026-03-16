@@ -321,7 +321,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
           <div style="overflow-x:auto"><table><thead><tr>
             <th>رقم المحل</th><th>رقم النظام</th><th>الموظف</th><th>العميل</th>
             <th>المنتج</th><th>نوع الطلب</th><th>موعد الاستلام</th>
-            <th>المبلغ</th><th>المتبقي</th><th>الحالة</th><th>إجراءات</th>
+            <th>المبلغ</th><th>المتبقي</th><th>الحالة</th><th>تأمين</th><th>إجراءات</th>
           </tr></thead><tbody id="ordersTbl"></tbody></table></div>
         </div>
       </div>
@@ -969,6 +969,7 @@ function renderOrders(){
       <td>${(o.amount||0).toLocaleString()}${disc>0?`<div style="font-size:10px;color:var(--red)">خصم:${disc.toLocaleString()}</div>`:''}<div style="font-size:10px;color:var(--gold)">صافي:${calcFinal(o).toLocaleString()}</div></td>
       <td style="color:${rem>0?'#E74C3C':'#2ECC71'};font-weight:700">${rem.toLocaleString()}</td>
       <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
+      <td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--blue)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'💰 محصّل'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         <button class="btn-sm" onclick="showTracking(${o.id})">تتبع</button>
         ${o.isDraft?`<button class="btn-sm green" onclick="confirmDraft(${o.id})">✅ تأكيد</button>`:`<button class="btn-sm blue" onclick="openOrderActions(${o.id})">إجراءات</button>`}
@@ -1177,7 +1178,7 @@ async function saveNewOrder(isDraft=false){
     dress_type:getProductsList().map(p=>p.name).filter(Boolean).join(' + ')||'',
     order_type:getMainOrderType(),
     extra_items:getProductsList(),
-    order_date:document.getElementById('fODate').value,delivery_date:document.getElementById('fDDate').value,
+    order_date:document.getElementById('fODate').value||null,delivery_date:document.getElementById('fDDate').value||null,
     amount:parseFloat(document.getElementById('fAmt').value)||0,
     deposit:parseFloat(document.getElementById('fDep').value)||0,
     pay_method:document.getElementById('fDepMeth')?.value==='__split__'?'مختلط':document.getElementById('fPay').value,
@@ -1185,7 +1186,8 @@ async function saveNewOrder(isDraft=false){
     insurance:parseFloat(document.getElementById('fIns')?.value)||0,
     insurance_returned:false,
     insurance_collect_time:document.getElementById('fInsCollect')?.value||'order',
-    insurance_collect_other:document.getElementById('fInsOther')?.value||'',status:document.getElementById('fStatus').value,
+    insurance_collect_other:document.getElementById('fInsOther')?.value||'',
+    status:document.getElementById('fStatus').value,
     notes:document.getElementById('fNotes').value,
     tracking,partial_payments:[],
     discount_type:document.getElementById('fDiscType')?.value||'none',
@@ -1195,6 +1197,17 @@ async function saveNewOrder(isDraft=false){
     extra_items:getOrderExtraItems(),
   });
   if(error){hideLoading();showToast('خطأ: '+error.message,'error');return;}
+  // If insurance collected at order time, record as income
+  const insAmtNew=parseFloat(document.getElementById('fIns')?.value)||0;
+  const insCollectNew=document.getElementById('fInsCollect')?.value||'order';
+  if(insAmtNew>0&&insCollectNew==='order'){
+    await sb.from('expenses').insert({
+      date:document.getElementById('fODate').value||new Date().toISOString().split('T')[0],
+      cat_main:'تأمين',cat_sub:'استلام تأمين',
+      description:`تأمين طلب #${inv} - ${client}`,
+      amount:-insAmtNew,
+    });
+  }
   await logAudit('إضافة طلب','orders',inv,`طلب جديد: ${client}`);
   await fetchAll();hideLoading();closeModal();renderOrders();
   showToast(isDraft?'✅ تم حفظ المسودة':`✅ تم إنشاء الطلب #${inv}`,'success');
@@ -1291,6 +1304,9 @@ async function saveInsurance(oid){
   const collectTime=document.getElementById('insCollectTime')?.value||'order';
   const collectOther=document.getElementById('insCollectOther')?.value||'';
   const o=db.orders.find(x=>x.id===oid);
+  const wasReturned=o.insuranceReturned;
+  const insAmt=o.insurance||0;
+  const today=dt||new Date().toISOString().split('T')[0];
   showLoading('...');
   await sb.from('orders').update({
     insurance_returned:ret,
@@ -1298,7 +1314,23 @@ async function saveInsurance(oid){
     insurance_collect_time:collectTime,
     insurance_collect_other:collectOther,
   }).eq('id',o.dbId);
-  await logAudit('تحديث تأمين','orders',oid,`مسترد:${ret} - وقت التحصيل:${collectTime}`);
+  // If newly collected (not returned) → add as income expense
+  if(!ret&&!wasReturned&&collectTime!=='delivery'&&insAmt>0){
+    await sb.from('expenses').insert({
+      date:today,cat_main:'تأمين',cat_sub:'استلام تأمين',
+      description:`تأمين طلب #${oid} - ${o.client}`,
+      amount:-insAmt, // negative = income marker
+    });
+  }
+  // If newly returned → add as expense (outgoing)
+  if(ret&&!wasReturned&&insAmt>0){
+    await sb.from('expenses').insert({
+      date:today,cat_main:'تأمين',cat_sub:'استرداد تأمين',
+      description:`استرداد تأمين طلب #${oid} - ${o.client}`,
+      amount:insAmt,
+    });
+  }
+  await logAudit('تحديث تأمين','orders',oid,`مسترد:${ret} - ${insAmt} ر.س`);
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('تم ✓','success');
 }
 
@@ -1354,7 +1386,12 @@ function showTracking(oid){
             <div style="font-size:12px"><div style="font-weight:700">${currentUser.name}</div><div style="font-size:10px;color:var(--gold)">يتسجل اسمك تلقائياً</div></div>
           </div>
           <div class="frow">
-            <div class="fg"><label>الخطوة التالية</label><select id="nxStep" onchange="updateSubSteps()">${next.map(s=>`<option>${s}</option>`).join('')}</select></div>
+            <div class="fg"><label>تحديث إلى</label>
+              <select id="nxStep" onchange="updateSubSteps()">
+                <optgroup label="الخطوات التالية">${next.map(s=>`<option value="${s}">${s}</option>`).join('')}</optgroup>
+                ${done.length>1?`<optgroup label="↩️ رجوع لخطوة سابقة">${steps.filter(s=>done.includes(s)&&s!==done[done.length-1]).map(s=>`<option value="${s}">↩️ ${s}</option>`).join('')}</optgroup>`:''}
+              </select>
+            </div>
             <div class="fg" id="subStepRow" style="display:${nextStepCfg?.subs?.length>0?'block':'none'}"><label>التفصيل</label><select id="nxSub">${(nextStepCfg?.subs||[]).map(s=>`<option>${s}</option>`).join('')}</select></div>
             <button class="btn-add" style="margin-bottom:2px" onclick="updateTracking(${oid})">تحديث</button>
           </div>
@@ -2010,9 +2047,11 @@ function renderReports(){
   const to=new Date(document.getElementById('repTo').value);to.setHours(23,59,59);
   const fOrders=db.orders.filter(o=>{const d=new Date(o.orderDate);return d>=from&&d<=to;});
   const fExp=db.expenses.filter(e=>{const d=new Date(e.date);return d>=from&&d<=to;});
+  const insIncome=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)<0).reduce((s,e)=>s+Math.abs(e.amount||0),0);
+  const insOut=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
   const sales=fOrders.reduce((s,o)=>s+calcFinal(o),0);
   const collected=fOrders.reduce((s,o)=>s+calcPaid(o),0);
-  const expenses=fExp.reduce((s,e)=>s+(e.amount||0),0);
+  const expenses=fExp.filter(e=>(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
   const uncollected=fOrders.reduce((s,o)=>s+Math.max(0,calcRem(o)),0);
   // Returns filtered by RETURN DATE (not order date)
   const fReturns=db.returns.filter(r=>{const d=new Date(r.date);return d>=from&&d<=to;});
@@ -2244,16 +2283,18 @@ function renderSettings(){
       <div class="tag-add"><input type="text" id="newPM" placeholder="طريقة جديدة"><button onclick="addToArr('payMethods','newPM')">+</button></div>
     </div>
     <div class="set-card">
-      <div class="set-ttl">🛤️ مراحل التتبع</div>
-      ${(cfg.trackingSteps||[]).map((step,si)=>`
-        <div style="background:var(--d3);padding:10px;border-radius:2px;margin-bottom:9px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+      <div class="set-ttl">🛤️ مراحل التتبع <span style="font-size:10px;color:var(--gr)">(اسحب لإعادة الترتيب)</span></div>
+      <div id="trackingStepsList">${(cfg.trackingSteps||[]).map((step,si)=>`
+        <div draggable="true" data-idx="${si}" ondragstart="trackDragStart(event,${si})" ondragover="trackDragOver(event)" ondrop="trackDrop(event,${si})" style="background:var(--d3);padding:10px;border-radius:2px;margin-bottom:9px;cursor:grab;border:1px solid rgba(255,255,255,.05)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+            <span style="color:var(--gr);font-size:16px;cursor:grab">⋮⋮</span>
             <input type="text" value="${step.name}" id="tsSN${si}" style="flex:1;background:var(--d4);border:1px solid rgba(201,168,76,.2);border-radius:2px;padding:5px 8px;color:var(--white);font-family:Tajawal,sans-serif;font-size:12px;outline:none">
-            <button class="tag-del" onclick="removeTrackStep(${si})" style="margin-right:7px">✕</button>
+            <button class="tag-del" onclick="removeTrackStep(${si})">✕</button>
           </div>
           <div class="tag-list">${(step.subs||[]).map((s,subi)=>`<span class="tag">${s}<button class="tag-del" onclick="removeTrackSub(${si},${subi})">✕</button></span>`).join('')}</div>
           <div class="tag-add"><input type="text" id="tsSub${si}" placeholder="تفصيل فرعي"><button onclick="addTrackSub(${si})">+</button></div>
         </div>`).join('')}
+      </div>
       <button class="btn-sm" onclick="addTrackStep()">+ خطوة</button>
     </div>
     <div class="set-card" style="grid-column:1/-1">
@@ -2482,6 +2523,7 @@ function renderDeliveries(){
       <td><div style="display:flex;gap:4px">
         <button class="btn-sm green" onclick="printDeliveryInvoice(${d.id})">فاتورة</button>
         ${canEdit?`<button class="btn-sm blue" onclick="openEditDelivery(${d.id})">تعديل</button>`:''}
+        ${(currentUser.role==='manager'||canDo('canEditDeliveryRecord'))?`<button class="btn-sm red" onclick="deleteDelivery(${d.id})">حذف</button>`:''}
       </div></td>
     </tr>`),
     `<tr style="background:rgba(201,168,76,.05)">
@@ -3335,6 +3377,81 @@ async function saveEditAttendance(id){
   }).eq('id',id);
   await logAudit('تعديل حضور','attendance',id,'');
   await fetchAll();hideLoading();closeModal();renderAttendance();showToast('تم ✓','success');
+}
+
+
+// ===== TRACKING DRAG & DROP =====
+let _dragIdx=null;
+function trackDragStart(e,idx){_dragIdx=idx;e.dataTransfer.effectAllowed='move';}
+function trackDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';}
+function trackDrop(e,toIdx){
+  e.preventDefault();
+  if(_dragIdx===null||_dragIdx===toIdx)return;
+  const steps=[...cfg.trackingSteps];
+  const moved=steps.splice(_dragIdx,1)[0];
+  steps.splice(toIdx,0,moved);
+  cfg.trackingSteps=steps;
+  _dragIdx=null;
+  renderSettings();
+}
+
+// ===== EDIT ORDER MODAL =====
+function openEditOrderModal(orderId){
+  const o=db.orders.find(x=>x.id===orderId);if(!o)return;
+  const empOpts=db.users.filter(u=>['staff','manager'].includes(u.role)).map(u=>`<option value="${u.name}" ${o.employee===u.name?'selected':''}>${u.name}</option>`).join('');
+  const prods=(cfg.products||[]).map(t=>`<option>${t}</option>`).join('');
+  const types=(cfg.orderTypes||[]).map(t=>`<option>${t}</option>`).join('');
+  const steps=(cfg.trackingSteps||[]).map(s=>`<option ${o.status===s.name?'selected':''}>${s.name}</option>`).join('')+'<option '+(o.status==='الحمدلله'?'selected':'')+'>الحمدلله</option>';
+  document.getElementById('MC').innerHTML=`
+  <div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="m-hdr"><div class="m-ttl">✏️ تعديل الطلب #${o.id}</div><button class="m-close" onclick="closeModal()">×</button></div>
+      <div class="m-body">
+        <div class="a-warn">تعديل الطلب بعد الإنشاء — سيتم تسجيل التعديل في سجل العمليات</div>
+        <div class="fgrid" style="margin-top:12px">
+          <div class="fg"><label>رقم الفاتورة المحلية</label><input type="text" id="eoLocal" value="${o.localInvoice||''}"></div>
+          <div class="fg"><label>الموظف المسؤول</label><select id="eoEmp">${empOpts}</select></div>
+          <div class="fg"><label>اسم العميلة</label><input type="text" id="eoClient" value="${o.client}"></div>
+          <div class="fg"><label>رقم الجوال</label><input type="text" id="eoPhone" value="${o.phone||''}"></div>
+          <div class="fg"><label>تاريخ الطلب</label><input type="date" id="eoODate" value="${o.orderDate||''}"></div>
+          <div class="fg"><label>موعد الاستلام</label><input type="date" id="eoDDate" value="${o.deliveryDate||''}"></div>
+          <div class="fg"><label>الحالة</label><select id="eoStatus">${steps}</select></div>
+          <div class="fg"><label>ملاحظات</label><textarea id="eoNotes" rows="2" style="width:100%;background:var(--d3);border:1px solid var(--d4);border-radius:2px;padding:9px;color:var(--white);font-family:Tajawal,sans-serif;font-size:12px;outline:none">${o.notes||''}</textarea></div>
+        </div>
+      </div>
+      <div class="m-foot">
+        <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveEditOrder(${orderId})">حفظ التعديلات</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveEditOrder(orderId){
+  const o=db.orders.find(x=>x.id===orderId);if(!o)return;
+  showLoading('جاري الحفظ...');
+  await sb.from('orders').update({
+    local_invoice:document.getElementById('eoLocal').value||null,
+    employee:document.getElementById('eoEmp').value,
+    client:document.getElementById('eoClient').value,
+    phone:document.getElementById('eoPhone').value,
+    order_date:document.getElementById('eoODate').value||null,
+    delivery_date:document.getElementById('eoDDate').value||null,
+    status:document.getElementById('eoStatus').value,
+    notes:document.getElementById('eoNotes').value,
+  }).eq('id',o.dbId);
+  await logAudit('تعديل طلب','orders',orderId,`تعديل بيانات #${orderId}`);
+  await fetchAll();hideLoading();closeModal();renderOrders();
+  showToast('تم التعديل ✓','success');
+}
+
+// ===== DELETE DELIVERY =====
+async function deleteDelivery(id){
+  if(!confirm('حذف هذا التسليم؟'))return;
+  showLoading('...');
+  await sb.from('deliveries').delete().eq('id',id);
+  await logAudit('حذف تسليم','deliveries',id,'');
+  await fetchAll();hideLoading();renderDeliveries();showToast('تم الحذف','error');
 }
 
 // ===== EXPORT EXCEL =====
