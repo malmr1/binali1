@@ -377,7 +377,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
         <div style="font-size:12px;color:var(--gr)" id="attStatus"></div>
       </div>
       <div class="sec-hdr"><div class="sec-ttl">سجل اليوم</div></div>
-      <div class="tw"><table><thead><tr><th>الموظف</th><th>الشفت</th><th>حضور</th><th>انصراف</th><th>المدة</th></tr></thead><tbody id="attTbl"></tbody></table></div>
+      <div class="tw"><table><thead><tr><th>الموظف</th><th>الشفت</th><th>حضور</th><th>انصراف</th><th>المدة</th><th>إجراءات</th></tr></thead><tbody id="attTbl"></tbody></table></div>
     </div>
 
     <!-- ATTEND REPORT -->
@@ -408,7 +408,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
           <select class="fi" id="salTypeF" onchange="renderSalaries()"><option value="">الكل</option><option value="salary">رواتب</option><option value="withdrawal">سحبيات</option></select>
           <select class="fi" id="salMonF" onchange="renderSalaries()"><option value="">كل الشهور</option></select>
         </div>
-        <table><thead><tr><th>الموظف</th><th>النوع</th><th>الشهر</th><th>الراتب الأساسي</th><th>المبلغ</th><th>الملاحظات</th><th>التاريخ</th><th>بواسطة</th></tr></thead><tbody id="salTbl"></tbody></table>
+        <table><thead><tr><th>الموظف</th><th>النوع</th><th>الشهر</th><th>الراتب الأساسي</th><th>المبلغ</th><th>الملاحظات</th><th>التاريخ</th><th>بواسطة</th><th>إجراءات</th></tr></thead><tbody id="salTbl"></tbody></table>
       </div>
     </div>
 
@@ -425,7 +425,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       <div class="topbar"><div><div class="pg-title">المرتجعات</div></div>
         <button class="btn-add" onclick="openReturnModal()">+ إضافة مرتجع</button>
       </div>
-      <div class="tw"><table><thead><tr><th>#</th><th>رقم الفاتورة</th><th>العميل</th><th>النوع</th><th>المبلغ المسترد</th><th>التاريخ</th><th>الملاحظات</th></tr></thead><tbody id="returnsTbl"></tbody></table></div>
+      <div class="tw"><table><thead><tr><th>#</th><th>رقم الفاتورة</th><th>العميل</th><th>النوع</th><th>المبلغ المسترد</th><th>التاريخ</th><th>الملاحظات</th><th>إجراءات</th></tr></thead><tbody id="returnsTbl"></tbody></table></div>
     </div>
 
     <!-- REPORTS -->
@@ -872,7 +872,8 @@ function renderDashboard(){
   const today=new Date().toISOString().split('T')[0];
   const total=db.orders.filter(o=>!o.isDraft).length;
   const drafts=db.orders.filter(o=>o.isDraft).length;
-  const pending=db.orders.filter(o=>o.status==='قيد التنفيذ'&&!o.isDraft).length;
+  const firstStep=(cfg.trackingSteps||[])[0]?.name||'استلام الطلب';
+  const pending=db.orders.filter(o=>!o.isDraft&&o.status!=='تم التسليم'&&o.status!=='الحمدلله'&&o.status!==firstStep).length;
   const deliv=db.orders.filter(o=>o.status==='تم التسليم').length;
   const uncollected=db.orders.filter(o=>!['تم التسليم','الحمدلله'].includes(o.status)&&!o.isDraft).reduce((s,o)=>s+Math.max(0,calcRem(o)),0);
   const totalSales=db.orders.filter(o=>!o.isDraft).reduce((s,o)=>s+calcFinal(o),0);
@@ -1029,8 +1030,27 @@ function openOrderModal(){
 
           <div class="fg"><label>المبلغ الكلي (ر.س) <span style="font-size:9px;color:var(--gr)">يتعبأ تلقائياً</span></label><input type="number" id="fAmt" oninput="calcDiscPreview()" placeholder="0" readonly style="color:var(--gold)"></div>
           <div class="fg"><label>طريقة الدفع</label><select id="fPay">${pays}</select></div>
-          <div class="fg"><label>العربون / الدفعة الأولى</label><input type="number" id="fDep"></div>
+          <div class="fg"><label>طريقة دفع العربون</label>
+            <select id="fDepMeth" onchange="toggleDepSplit(this.value)">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
+          </div>
+          <div class="fg"><label>العربون / الدفعة الأولى</label><input type="number" id="fDep" placeholder="0" oninput="calcDepSplit()"></div>
+          <div id="depSplitRow" style="display:none;grid-column:1/-1">
+            <div class="fgrid">
+              <div class="fg"><label>نقدي (ر.س)</label><input type="number" id="fDepCash" placeholder="0" oninput="calcDepSplit()"></div>
+              <div class="fg"><label>شبكة (ر.س)</label><input type="number" id="fDepCard" placeholder="0" oninput="calcDepSplit()"></div>
+            </div>
+            <div id="depSplitTotal" style="font-size:11px;color:var(--gold);margin-top:4px"></div>
+          </div>
           <div class="fg" id="insRow" style="display:none"><label>تأمين (ر.س)</label><input type="number" id="fIns" value="0"></div>
+          <div class="fg" id="insCollectRow" style="display:none">
+            <label>وقت تحصيل التأمين</label>
+            <select id="fInsCollect" onchange="document.getElementById('fInsOtherRow').style.display=this.value==='other'?'block':'none'">
+              <option value="order">عند الطلب</option>
+              <option value="delivery">عند التسليم</option>
+              <option value="other">أخرى...</option>
+            </select>
+          </div>
+          <div class="fg" id="fInsOtherRow" style="display:none"><label>تفاصيل وقت التحصيل</label><input type="text" id="fInsOther" placeholder="مثال: بعد الخياطة"></div>
           ${(cfg.discountEnabled!==false)?`
           <div class="fg"><label>نوع الخصم</label>
             <select id="fDiscType" onchange="calcDiscPreview()">
@@ -1147,7 +1167,7 @@ function calcDiscPreview(){
 
 async function saveNewOrder(isDraft=false){
   const client=document.getElementById('fClient').value.trim();
-  if(!client){showToast('أدخل اسم العميلة','error');return;}
+  if(!isDraft&&!client){showToast('أدخل اسم العميلة','error');return;}
   const inv=isDraft?0:nextInvoice++;
   const tracking=isDraft?[]:[{step:'استلام الطلب',sub:'',who:currentUser.name,when:new Date().toLocaleString('ar-SA')}];
   showLoading(isDraft?'جاري حفظ المسودة...':'جاري الحفظ...');
@@ -1160,9 +1180,12 @@ async function saveNewOrder(isDraft=false){
     order_date:document.getElementById('fODate').value,delivery_date:document.getElementById('fDDate').value,
     amount:parseFloat(document.getElementById('fAmt').value)||0,
     deposit:parseFloat(document.getElementById('fDep').value)||0,
-    pay_method:document.getElementById('fPay').value,
+    pay_method:document.getElementById('fDepMeth')?.value==='__split__'?'مختلط':document.getElementById('fPay').value,
+    deposit_split:{cash:parseFloat(document.getElementById('fDepCash')?.value)||0,card:parseFloat(document.getElementById('fDepCard')?.value)||0},
     insurance:parseFloat(document.getElementById('fIns')?.value)||0,
-    insurance_returned:false,status:document.getElementById('fStatus').value,
+    insurance_returned:false,
+    insurance_collect_time:document.getElementById('fInsCollect')?.value||'order',
+    insurance_collect_other:document.getElementById('fInsOther')?.value||'',status:document.getElementById('fStatus').value,
     notes:document.getElementById('fNotes').value,
     tracking,partial_payments:[],
     discount_type:document.getElementById('fDiscType')?.value||'none',
@@ -1564,6 +1587,7 @@ function renderAttendance(){
     <td style="color:var(--green)">${a.checkin||'-'}</td>
     <td style="color:${a.checkout?'var(--red)':'var(--orange)'}">${a.checkout||'لم يسجل'}</td>
     <td>${a.duration?fmtDur(a.duration):'-'}</td>
+    <td>${(currentUser.role==='manager'||canDo('canEditAttendance'))?`<button class="btn-sm blue" onclick="openEditAttendance(${a.id})">تعديل</button>`:''}</td>
   </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--gr)">لا يوجد تسجيل اليوم</td></tr>';
 }
 
@@ -1592,6 +1616,7 @@ async function renderAttRep(){
     <td style="color:var(--green)">${a.checkin||'-'}</td>
     <td style="color:${a.checkout?'var(--red)':'var(--orange)'}">${a.checkout||'لم يسجل'}</td>
     <td>${a.duration?fmtDur(a.duration):'-'}</td>
+    <td>${(currentUser.role==='manager'||canDo('canEditAttendance'))?`<button class="btn-sm blue" onclick="openEditAttendance(${a.id})">تعديل</button>`:''}</td>
   </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--gr)">لا توجد بيانات</td></tr>';
 }
 
@@ -1663,6 +1688,7 @@ function renderSalaries(){
     <td style="color:var(--gr)">${s.notes||'-'}</td>
     <td>${s.date||''}</td>
     <td style="color:var(--gr);font-size:10px">${s.createdBy||''}</td>
+    <td>${(currentUser.role==='manager'||canDo('canEditSalaries'))?`<button class="btn-sm blue" onclick="openEditSalary(${s.id})">تعديل</button>`:''}</td>
   </tr>`).join('')||'<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--gr)">لا توجد سجلات</td></tr>';
 }
 
@@ -1763,7 +1789,10 @@ function renderExpenses(){
     <td>${e.catSub||'-'}</td>
     <td>${e.description||'-'}</td>
     <td style="color:var(--red);font-weight:700">${(e.amount||0).toLocaleString()} ر.س</td>
-    <td><button class="btn-sm red" onclick="deleteExpense(${e.id})">حذف</button></td>
+    <td><div style="display:flex;gap:4px">
+      ${(currentUser.role==='manager'||canDo('canEditExpenses'))?`<button class="btn-sm blue" onclick="openEditExpense(${e.id})">تعديل</button>`:''}
+      ${currentUser.role==='manager'?`<button class="btn-sm red" onclick="deleteExpense(${e.id})">حذف</button>`:''}
+    </div></td>
   </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;padding:22px;color:var(--gr)">لا توجد مصروفات</td></tr>';
 }
 
@@ -1823,6 +1852,7 @@ function renderReturns(){
     <td style="color:var(--orange);font-weight:700">${(r.amount||0).toLocaleString()} ر.س</td>
     <td>${r.date||''}</td>
     <td style="color:var(--gr)">${r.notes||'-'}</td>
+    <td>${(currentUser.role==='manager'||canDo('canEditReturns'))?`<button class="btn-sm blue" onclick="openEditReturn(${r.id})">تعديل</button>`:''}</td>
   </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--gr)">لا توجد مرتجعات</td></tr>';
 }
 
@@ -1856,35 +1886,35 @@ function lookupReturn(){
   const o=db.orders.find(x=>x.id===inv);
   const el=document.getElementById('retOrderInfo');
   if(!o){el.style.display='block';el.innerHTML='<span style="color:var(--red)">لم يتم العثور على الطلب</span>';return;}
+  const paid=calcPaid(o);
+  const totalItems=(o.extraItems||[]).reduce((s,it)=>s+(it.price||0),0)||(o.amount||1);
+  // Calculate proportional paid amount per item
   const ei=o.extraItems||[];
-  // Build items list: main dress + extra items
-  const allItems=[
-    {name:o.dressType,price:o.amount||0,isMain:true},
-    ...ei.map(it=>({name:it.name,price:it.price||0,isMain:false}))
-  ];
+  const allItems=ei.length>0
+    ? ei.map(it=>({name:it.name,origPrice:it.price||0,paidPrice:Math.round((it.price||0)/totalItems*paid)}))
+    : [{name:o.dressType,origPrice:o.amount||0,paidPrice:paid}];
   const itemsHtml=`
     <div style="margin-top:11px">
-      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">اختر المرتجعات:</div>
+      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">اختر المرتجعات: <span style="color:var(--gr)">(الحد الأقصى: ${paid.toLocaleString()} ر.س)</span></div>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;background:rgba(201,168,76,.08);padding:7px 9px;border-radius:2px;margin-bottom:6px;border:1px solid rgba(201,168,76,.2)">
         <input type="checkbox" id="ret_all" onchange="toggleReturnAll(this)" style="width:auto">
-        <span style="font-weight:700">استرداد الكل — ${calcPaid(o).toLocaleString()} ر.س</span>
+        <span style="font-weight:700">استرداد الكل — ${paid.toLocaleString()} ر.س</span>
       </label>
       ${allItems.map((item,i)=>`
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;padding:6px 9px;border-radius:2px;margin-bottom:4px;background:var(--d3)">
-          <input type="checkbox" class="ret_item" data-price="${item.price}" data-name="${item.name}" onchange="calcReturnTotal()" style="width:auto">
-          <span>${item.name} — ${(item.price||0).toLocaleString()} ر.س</span>
+          <input type="checkbox" class="ret_item" data-price="${item.paidPrice}" data-name="${item.name}" onchange="calcReturnTotal(${paid})" style="width:auto">
+          <span>${item.name} — ${item.paidPrice.toLocaleString()} ر.س <span style="color:var(--gr);font-size:10px">(من المدفوع)</span></span>
         </label>`).join('')}
     </div>`;
   el.style.display='block';
   el.innerHTML=`<div style="font-size:12px;margin-bottom:4px"><strong>${o.client}</strong> · ${o.dressType}</div>
-    <div style="font-size:11px;color:var(--gr)">المبلغ: ${calcFinal(o).toLocaleString()} ر.س · المدفوع: ${calcPaid(o).toLocaleString()} ر.س</div>
+    <div style="font-size:11px;color:var(--gr)">الإجمالي: ${calcFinal(o).toLocaleString()} ر.س · <span style="color:var(--green)">المدفوع: ${paid.toLocaleString()} ر.س</span></div>
     ${itemsHtml}`;
   document.getElementById('retAmt').value='';
 }
 
 function toggleReturnAll(cb){
-  const items=document.querySelectorAll('.ret_item');
-  items.forEach(it=>{it.checked=false;});
+  document.querySelectorAll('.ret_item').forEach(it=>{it.checked=false;});
   if(cb.checked){
     const inv=parseInt(document.getElementById('retInv').value)||0;
     const o=db.orders.find(x=>x.id===inv);
@@ -1894,13 +1924,16 @@ function toggleReturnAll(cb){
   }
 }
 
-function calcReturnTotal(){
-  // Uncheck "all" if individual items selected
+function calcReturnTotal(maxAmt){
   document.getElementById('ret_all').checked=false;
   const items=document.querySelectorAll('.ret_item:checked');
   let total=0;
-  const names=[];
-  items.forEach(it=>{total+=parseFloat(it.dataset.price)||0;names.push(it.dataset.name);});
+  items.forEach(it=>{total+=parseFloat(it.dataset.price)||0;});
+  // Cap at max paid amount
+  if(maxAmt&&total>maxAmt){
+    total=maxAmt;
+    showToast('المجموع لا يتجاوز المدفوع ('+maxAmt.toLocaleString()+' ر.س)','error');
+  }
   document.getElementById('retAmt').value=total||'';
 }
 
@@ -2360,7 +2393,7 @@ function openCustomRoleModal(){
         </div>
         <div class="fg" style="margin-top:10px"><label>إضافة صلاحيات خاصة</label>
           <div style="display:grid;gap:6px;margin-top:6px">
-            ${[{id:'canAddOrder',label:'إضافة طلبات'},{id:'canEditDelivery',label:'تعديل موعد الاستلام'},{id:'canUpdateTracking',label:'تحديث التتبع'},{id:'canAddDelivery',label:'إدخال التسليمات'},{id:'canEditDeliveryRecord',label:'تعديل التسليمات'},{id:'canViewMeasurements',label:'رؤية المقاسات'},{id:'canViewInvoiceAmount',label:'رؤية الفاتورة بالمبلغ'}].map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="crperm-${p.id}" style="width:auto"> ${p.label}</label>`).join('')}
+            ${[{id:'canAddOrder',label:'إضافة طلبات'},{id:'canEditDelivery',label:'تعديل موعد الاستلام'},{id:'canUpdateTracking',label:'تحديث التتبع'},{id:'canAddDelivery',label:'إدخال التسليمات'},{id:'canEditDeliveryRecord',label:'تعديل التسليمات'},{id:'canViewMeasurements',label:'رؤية المقاسات'},{id:'canViewInvoiceAmount',label:'رؤية الفاتورة بالمبلغ'},{id:'canEditOrders',label:'تعديل الطلبات'},{id:'canEditExpenses',label:'تعديل المصروفات'},{id:'canEditReturns',label:'تعديل المرتجعات'},{id:'canEditSalaries',label:'تعديل الرواتب'},{id:'canEditAttendance',label:'تعديل الحضور'}].map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="crperm-${p.id}" style="width:auto"> ${p.label}</label>`).join('')}
           </div>
         </div>
       </div>
@@ -3089,7 +3122,10 @@ function calcProductsTotal(){
 function checkRentalMulti(){
   const hasRental=_products.some(p=>p.type&&p.type.includes('ايجار'));
   const row=document.getElementById('insRow');
+  const collectRow=document.getElementById('insCollectRow');
   if(row)row.style.display=hasRental?'block':'none';
+  if(collectRow)collectRow.style.display=hasRental?'block':'none';
+  if(!hasRental){const or=document.getElementById('fInsOtherRow');if(or)or.style.display='none';}
 }
 
 function getProductsList(){
@@ -3133,6 +3169,172 @@ async function confirmDraft(orderId){
   await logAudit('تأكيد مسودة','orders',inv,`${o.client} → طلب #${inv}`);
   await fetchAll();hideLoading();renderOrders();
   showToast(`✅ تم تأكيد الطلب #${inv}`,'success');
+}
+
+
+function toggleDepSplit(val){
+  const row=document.getElementById('depSplitRow');
+  if(row)row.style.display=val==='__split__'?'grid':'none';
+}
+function calcDepSplit(){
+  const cash=parseFloat(document.getElementById('fDepCash')?.value)||0;
+  const card=parseFloat(document.getElementById('fDepCard')?.value)||0;
+  const total=cash+card;
+  if(total>0){
+    const depEl=document.getElementById('fDep');
+    if(depEl)depEl.value=total;
+    const el=document.getElementById('depSplitTotal');
+    if(el)el.textContent='الإجمالي: '+total.toLocaleString()+' ر.س';
+  }
+}
+
+
+// ===== EDIT FUNCTIONS =====
+
+function openEditExpense(id){
+  const e=db.expenses.find(x=>x.id===id);if(!e)return;
+  const cats=cfg.expCats||[];
+  document.getElementById('MC').innerHTML=`
+  <div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal modal-sm">
+      <div class="m-hdr"><div class="m-ttl">تعديل مصروف</div><button class="m-close" onclick="closeModal()">×</button></div>
+      <div class="m-body">
+        <div class="fg"><label>التاريخ</label><input type="date" id="eeDate" value="${e.date}"></div>
+        <div class="fg"><label>البند الرئيسي</label>
+          <select id="eeCatM" onchange="updateExpSubsEdit()">${cats.map(c=>`<option ${e.catMain===c.name?'selected':''}>${c.name}</option>`).join('')}</select>
+        </div>
+        <div class="fg"><label>البند الفرعي</label><select id="eeCatS"></select></div>
+        <div class="fg"><label>الوصف</label><input type="text" id="eeDesc" value="${e.description||''}"></div>
+        <div class="fg"><label>المبلغ</label><input type="number" id="eeAmt" value="${e.amount||0}"></div>
+      </div>
+      <div class="m-foot">
+        <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveEditExpense(${id})">حفظ</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>{updateExpSubsEdit(e.catSub);},30);
+}
+
+function updateExpSubsEdit(selectedSub=''){
+  const m=document.getElementById('eeCatM')?.value;
+  const cat=(cfg.expCats||[]).find(c=>c.name===m);
+  const sel=document.getElementById('eeCatS');if(!sel)return;
+  sel.innerHTML=(cat?.subs||[]).map(s=>`<option ${s===selectedSub?'selected':''}>${s}</option>`).join('');
+}
+
+async function saveEditExpense(id){
+  showLoading('...');
+  await sb.from('expenses').update({
+    date:document.getElementById('eeDate').value,
+    cat_main:document.getElementById('eeCatM').value,
+    cat_sub:document.getElementById('eeCatS').value,
+    description:document.getElementById('eeDesc').value,
+    amount:parseFloat(document.getElementById('eeAmt').value)||0,
+  }).eq('id',id);
+  await logAudit('تعديل مصروف','expenses',id,'');
+  await fetchAll();hideLoading();closeModal();renderExpenses();showToast('تم ✓','success');
+}
+
+function openEditReturn(id){
+  const r=db.returns.find(x=>x.id===id);if(!r)return;
+  document.getElementById('MC').innerHTML=`
+  <div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal modal-sm">
+      <div class="m-hdr"><div class="m-ttl">تعديل مرتجع</div><button class="m-close" onclick="closeModal()">×</button></div>
+      <div class="m-body">
+        <div class="fg"><label>النوع</label><select id="erType"><option value="refund" ${r.type==='refund'?'selected':''}>رد فلوس</option><option value="cancel" ${r.type==='cancel'?'selected':''}>إلغاء طلب</option></select></div>
+        <div class="fg"><label>المبلغ</label><input type="number" id="erAmt" value="${r.amount||0}"></div>
+        <div class="fg"><label>التاريخ</label><input type="date" id="erDate" value="${r.date}"></div>
+        <div class="fg"><label>ملاحظات</label><textarea id="erNotes" rows="2">${r.notes||''}</textarea></div>
+      </div>
+      <div class="m-foot">
+        <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveEditReturn(${id})">حفظ</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveEditReturn(id){
+  showLoading('...');
+  await sb.from('returns').update({
+    type:document.getElementById('erType').value,
+    amount:parseFloat(document.getElementById('erAmt').value)||0,
+    date:document.getElementById('erDate').value,
+    notes:document.getElementById('erNotes').value,
+  }).eq('id',id);
+  await logAudit('تعديل مرتجع','returns',id,'');
+  await fetchAll();hideLoading();closeModal();renderReturns();showToast('تم ✓','success');
+}
+
+function openEditSalary(id){
+  const s=db.salaries.find(x=>x.id===id);if(!s)return;
+  document.getElementById('MC').innerHTML=`
+  <div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal modal-sm">
+      <div class="m-hdr"><div class="m-ttl">تعديل ${s.type==='salary'?'راتب':'سحبية'}</div><button class="m-close" onclick="closeModal()">×</button></div>
+      <div class="m-body">
+        <div class="fg"><label>الموظف</label><input type="text" value="${s.empName}" readonly style="color:var(--gr)"></div>
+        <div class="fg"><label>المبلغ</label><input type="number" id="esAmt" value="${s.amount||0}"></div>
+        <div class="fg"><label>الشهر</label><input type="month" id="esMon" value="${s.month||''}"></div>
+        <div class="fg"><label>التاريخ</label><input type="date" id="esDate" value="${s.date}"></div>
+        <div class="fg"><label>ملاحظات</label><input type="text" id="esNotes" value="${s.notes||''}"></div>
+      </div>
+      <div class="m-foot">
+        <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveEditSalary(${id})">حفظ</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveEditSalary(id){
+  showLoading('...');
+  await sb.from('salaries').update({
+    amount:parseFloat(document.getElementById('esAmt').value)||0,
+    month:document.getElementById('esMon').value,
+    date:document.getElementById('esDate').value,
+    notes:document.getElementById('esNotes').value,
+  }).eq('id',id);
+  await logAudit('تعديل راتب','salaries',id,'');
+  await fetchAll();hideLoading();closeModal();renderSalaries();showToast('تم ✓','success');
+}
+
+function openEditAttendance(id){
+  const a=db.attendance.find(x=>x.id===id);
+  if(!a){
+    // fetch from full list - attendance only loads today
+    showToast('افتح تقرير الحضور للتعديل','error');return;
+  }
+  document.getElementById('MC').innerHTML=`
+  <div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal modal-sm">
+      <div class="m-hdr"><div class="m-ttl">تعديل حضور - ${a.userName}</div><button class="m-close" onclick="closeModal()">×</button></div>
+      <div class="m-body">
+        <div class="fg"><label>الشفت</label><input type="text" id="eaShift" value="${a.shift||''}"></div>
+        <div class="fg"><label>وقت الحضور</label><input type="time" id="eaIn" value="${a.checkin||''}"></div>
+        <div class="fg"><label>وقت الانصراف</label><input type="time" id="eaOut" value="${a.checkout||''}"></div>
+      </div>
+      <div class="m-foot">
+        <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveEditAttendance(${id})">حفظ</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveEditAttendance(id){
+  const cin=document.getElementById('eaIn').value;
+  const cout=document.getElementById('eaOut').value;
+  const dur=cin&&cout?calcDurMins(cin,cout):0;
+  showLoading('...');
+  await sb.from('attendance').update({
+    shift:document.getElementById('eaShift').value,
+    checkin_time:cin,checkout_time:cout,duration_minutes:dur,
+  }).eq('id',id);
+  await logAudit('تعديل حضور','attendance',id,'');
+  await fetchAll();hideLoading();closeModal();renderAttendance();showToast('تم ✓','success');
 }
 
 // ===== EXPORT EXCEL =====
