@@ -674,13 +674,26 @@ async function doLogin(){
     if(data.password===p){
       try{await sb.from('users').update({password:hashed}).eq('id',data.id);}catch(e){}
     }
-    await loadSettings();await fetchAll();
+    try{
+      await loadSettings();
+      await fetchAll();
+    }catch(fe){
+      hideLoading();
+      const errEl=document.getElementById('loginErr');
+      if(errEl){errEl.textContent='خطأ في تحميل البيانات: '+fe.message;errEl.style.display='block';}
+      return;
+    }
     hideLoading();
     sessionStorage.setItem('benali_u',JSON.stringify(currentUser));
     document.getElementById('loginScreen').style.display='none';
     document.getElementById('app').style.display='block';
     initApp();
-  }catch(e){hideLoading();showToast('خطأ: '+e.message,'error');console.error('Login error:',e);}
+  }catch(e){
+    hideLoading();
+    const errEl=document.getElementById('loginErr');
+    if(errEl){errEl.textContent='خطأ: '+e.message;errEl.style.display='block';}
+    showToast('خطأ: '+e.message,'error');
+  }
 }
 
 function doLogout(){
@@ -949,7 +962,7 @@ function renderOrders(){
       <td style="color:var(--gr)">${o.localInvoice||'-'}</td>
       <td><strong style="color:var(--gold);cursor:pointer" onclick="showQR(${o.id})">#${o.id} 🔳</strong></td>
       <td>${o.employee||'-'}</td>
-      <td><div style="font-weight:600">${o.client}${o.returned?` <span class="badge b-red">مرتجع</span>`:''} ${o.isDraft?'<span class="badge b-gray">مسودة</span>":''}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
+      <td><div style="font-weight:600">${o.client}${o.returned?` <span class="badge b-red">مرتجع</span>`:''} ${o.isDraft?`<span class="badge b-gray">مسودة</span>`:''}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
       <td>${o.dressType}</td><td>${o.orderType}</td>
       <td>${o.deliveryDate}<div style="font-size:9px;color:var(--gr)">${toHijri(o.deliveryDate)}</div></td>
       <td>${(o.amount||0).toLocaleString()}${disc>0?`<div style="font-size:10px;color:var(--red)">خصم:${disc.toLocaleString()}</div>`:''}<div style="font-size:10px;color:var(--gold)">صافي:${calcFinal(o).toLocaleString()}</div></td>
@@ -1161,7 +1174,7 @@ async function saveNewOrder(isDraft=false){
   if(error){hideLoading();showToast('خطأ: '+error.message,'error');return;}
   await logAudit('إضافة طلب','orders',inv,`طلب جديد: ${client}`);
   await fetchAll();hideLoading();closeModal();renderOrders();
-  showToast(isDraft?'✅ تم حفظ المسودة':'`✅ تم إنشاء الطلب #${inv}`','success');
+  showToast(isDraft?'✅ تم حفظ المسودة':`✅ تم إنشاء الطلب #${inv}`,'success');
 }
 
 function openOrderActions(orderId){
