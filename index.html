@@ -292,7 +292,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       <div id="dailySummary"></div>
       <div class="stats-grid" id="statsGrid"></div>
       <div class="sec-hdr"><div class="sec-ttl">آخر الطلبات</div></div>
-      <div class="tw"><div style="overflow-x:auto"><table><thead><tr><th>رقم المحل</th><th>رقم النظام</th><th>العميل</th><th>المنتج</th><th>موعد الاستلام</th><th>الحالة</th><th>المبلغ</th></tr></thead><tbody id="dashTbl"></tbody></table></div></div>
+      <div class="tw"><div style="overflow-x:auto"><table><thead id="dashTblHead"><tr><th>رقم المحل</th><th>رقم النظام</th><th>العميل</th><th>المنتج</th><th>موعد الاستلام</th><th>الحالة</th></tr></thead><tbody id="dashTbl"></tbody></table></div></div>
     </div>
 
     <!-- ORDERS -->
@@ -888,12 +888,14 @@ function renderDashboard(){
   const todayExpenses=db.expenses.filter(e=>e.date===today).reduce((s,e)=>s+(e.amount||0),0);
   // Unreturned insurance
   const unretIns=db.orders.filter(o=>o.insurance>0&&!o.insuranceReturned&&o.status==='تم التسليم');
+  const showAmounts=currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts');
   document.getElementById('statsGrid').innerHTML=`
     <div class="stat-card sc-gold"><div class="s-lbl">إجمالي الطلبات</div><div class="s-val">${total}</div>${drafts>0?`<div class="s-sub">${drafts} مسودة</div>`:''}<div class="s-icon">👗</div></div>
     <div class="stat-card sc-red"><div class="s-lbl">قيد التنفيذ</div><div class="s-val">${pending}</div><div class="s-icon">⏳</div></div>
     <div class="stat-card sc-green"><div class="s-lbl">تم التسليم</div><div class="s-val">${deliv}</div><div class="s-icon">✅</div></div>
+    ${showAmounts?`
     <div class="stat-card sc-blue"><div class="s-lbl">إجمالي المبيعات</div><div class="s-val">${totalSales.toLocaleString()}</div><div class="s-sub">ريال</div><div class="s-icon">📊</div></div>
-    <div class="stat-card sc-orange"><div class="s-lbl">متبقي غير محصل</div><div class="s-val">${uncollected.toLocaleString()}</div><div class="s-sub">ريال</div><div class="s-icon">💰</div></div>
+    <div class="stat-card sc-orange"><div class="s-lbl">متبقي غير محصل</div><div class="s-val">${uncollected.toLocaleString()}</div><div class="s-sub">ريال</div><div class="s-icon">💰</div></div>`:''}
   `;
   // Daily summary
   const dailyEl=document.getElementById('dailySummary');
@@ -909,6 +911,7 @@ function renderDashboard(){
       </div>
     </div>`;
   }
+  const showAmountsD=currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts');
   document.getElementById('dashTbl').innerHTML=[...db.orders].slice(0,10).map(o=>{
     const h=(o.tracking||[]).slice(-1)[0];
     return`<tr>
@@ -918,7 +921,7 @@ function renderDashboard(){
       <td>${o.dressType}</td>
       <td>${o.deliveryDate}<div style="font-size:9px;color:var(--gr)">${toHijri(o.deliveryDate)}</div></td>
       <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
-      <td>${calcFinal(o).toLocaleString()} ر.س</td>
+      ${showAmountsD?`<td>${calcFinal(o).toLocaleString()} ر.س</td>`:''}
     </tr>`;
   }).join('');
   checkDelivAlerts();
@@ -969,10 +972,11 @@ function renderOrders(){
       <td><div style="font-weight:600">${o.client}${o.returned?` <span class="badge b-red">مرتجع</span>`:''} ${o.isDraft?`<span class="badge b-gray">مسودة</span>`:''}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
       <td>${o.dressType}</td><td>${o.orderType}</td>
       <td>${o.deliveryDate}<div style="font-size:9px;color:var(--gr)">${toHijri(o.deliveryDate)}</div></td>
+      ${(currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts'))?`
       <td>${(o.amount||0).toLocaleString()}${disc>0?`<div style="font-size:10px;color:var(--red)">خصم:${disc.toLocaleString()}</div>`:''}<div style="font-size:10px;color:var(--gold)">صافي:${calcFinal(o).toLocaleString()}</div></td>
-      <td style="color:${rem>0?'#E74C3C':'#2ECC71'};font-weight:700">${rem.toLocaleString()}</td>
+      <td style="color:${rem>0?'#E74C3C':'#2ECC71'};font-weight:700">${rem.toLocaleString()}</td>`:''}
       <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
-      <td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--blue)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'💰 محصّل'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>
+      ${(currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts'))?`<td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--blue)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'💰 محصّل'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>`:''}
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         <button class="btn-sm" onclick="showTracking(${o.id})">تتبع</button>
         ${(currentUser.role==='manager'||canDo('canEditOrders'))?`<button class="btn-sm" onclick="openEditOrderModal(${o.id})">✏️ تعديل</button>`:''}
@@ -2424,7 +2428,7 @@ function openCustomRoleModal(){
         </div>
         <div class="fg" style="margin-top:10px"><label>إضافة صلاحيات خاصة</label>
           <div style="display:grid;gap:6px;margin-top:6px">
-            ${[{id:'canAddOrder',label:'إضافة طلبات'},{id:'canEditDelivery',label:'تعديل موعد الاستلام'},{id:'canUpdateTracking',label:'تحديث التتبع'},{id:'canAddDelivery',label:'إدخال التسليمات'},{id:'canEditDeliveryRecord',label:'تعديل التسليمات'},{id:'canViewMeasurements',label:'رؤية المقاسات'},{id:'canViewInvoiceAmount',label:'رؤية الفاتورة بالمبلغ'},{id:'canEditOrders',label:'تعديل الطلبات'},{id:'canEditExpenses',label:'تعديل المصروفات'},{id:'canEditReturns',label:'تعديل المرتجعات'},{id:'canEditSalaries',label:'تعديل الرواتب'},{id:'canEditAttendance',label:'تعديل الحضور'}].map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="crperm-${p.id}" style="width:auto"> ${p.label}</label>`).join('')}
+            ${[{id:'canAddOrder',label:'إضافة طلبات'},{id:'canEditDelivery',label:'تعديل موعد الاستلام'},{id:'canUpdateTracking',label:'تحديث التتبع'},{id:'canAddDelivery',label:'إدخال التسليمات'},{id:'canEditDeliveryRecord',label:'تعديل التسليمات'},{id:'canViewMeasurements',label:'رؤية المقاسات'},{id:'canViewInvoiceAmount',label:'رؤية الفاتورة بالمبلغ'},{id:'canEditOrders',label:'تعديل الطلبات'},{id:'canEditExpenses',label:'تعديل المصروفات'},{id:'canEditReturns',label:'تعديل المرتجعات'},{id:'canEditSalaries',label:'تعديل الرواتب'},{id:'canEditAttendance',label:'تعديل الحضور'},{id:'canViewAmounts',label:'رؤية المبالغ والإيرادات'}].map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="crperm-${p.id}" style="width:auto"> ${p.label}</label>`).join('')}
           </div>
         </div>
       </div>
