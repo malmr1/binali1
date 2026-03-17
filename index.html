@@ -390,7 +390,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
         </div>
       </div>
       <div class="stats-grid" id="arStats" style="grid-template-columns:repeat(4,1fr)"></div>
-      <div class="tw"><table><thead><tr><th>الموظف</th><th>التاريخ</th><th>الشفت</th><th>حضور</th><th>انصراف</th><th>المدة</th></tr></thead><tbody id="arTbl"></tbody></table></div>
+      <div class="tw"><table><thead><tr><th>الموظف</th><th>التاريخ</th><th>الشفت</th><th>حضور</th><th>انصراف</th><th>المدة</th><th>إجراءات</th></tr></thead><tbody id="arTbl"></tbody></table></div>
     </div>
 
     <!-- SALARIES -->
@@ -3489,6 +3489,43 @@ async function deleteDelivery(id){
   await sb.from('deliveries').delete().eq('id',id);
   await logAudit('حذف تسليم','deliveries',id,'');
   await fetchAll();hideLoading();renderDeliveries();showToast('تم الحذف','error');
+}
+
+
+async function openEditAttendanceReport(id){
+  // Fetch this specific attendance record
+  const{data}=await sb.from('attendance').select('*').eq('id',id).single();
+  if(!data){showToast('لم يتم العثور على السجل','error');return;}
+  document.getElementById('MC').innerHTML=`
+  <div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal modal-sm">
+      <div class="m-hdr"><div class="m-ttl">تعديل حضور - ${data.user_name}</div><button class="m-close" onclick="closeModal()">×</button></div>
+      <div class="m-body">
+        <div class="fg"><label>الشفت</label><input type="text" id="earShift" value="${data.shift||''}"></div>
+        <div class="fg"><label>التاريخ</label><input type="date" id="earDate" value="${data.date||''}"></div>
+        <div class="fg"><label>وقت الحضور</label><input type="time" id="earIn" value="${data.checkin_time||''}"></div>
+        <div class="fg"><label>وقت الانصراف</label><input type="time" id="earOut" value="${data.checkout_time||''}"></div>
+      </div>
+      <div class="m-foot">
+        <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveEditAttendanceReport(${id})">حفظ</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveEditAttendanceReport(id){
+  const cin=document.getElementById('earIn').value;
+  const cout=document.getElementById('earOut').value;
+  const dur=cin&&cout?calcDurMins(cin,cout):0;
+  showLoading('...');
+  await sb.from('attendance').update({
+    shift:document.getElementById('earShift').value,
+    date:document.getElementById('earDate').value,
+    checkin_time:cin,checkout_time:cout,duration_minutes:dur,
+  }).eq('id',id);
+  await logAudit('تعديل حضور','attendance',id,'');
+  await fetchAll();hideLoading();closeModal();renderAttRep();showToast('تم ✓','success');
 }
 
 // ===== EXPORT EXCEL =====
