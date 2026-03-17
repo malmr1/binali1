@@ -566,7 +566,11 @@ async function loadSettings(){
   // Load editable builtin roles if saved
   if(cfg.builtinRoles){
     Object.keys(cfg.builtinRoles).forEach(k=>{
-      if(BUILTIN_ROLES[k])BUILTIN_ROLES[k].pages=cfg.builtinRoles[k].pages||BUILTIN_ROLES[k].pages;
+      // NEVER override manager - manager always has all pages
+      if(k==='manager')return;
+      if(BUILTIN_ROLES[k]){
+        BUILTIN_ROLES[k].pages=cfg.builtinRoles[k].pages||BUILTIN_ROLES[k].pages;
+      }
     });
   }
 }
@@ -2928,6 +2932,7 @@ function syncG(hId,gId){}
 
 
 function editBuiltinRole(roleKey, roleLabel){
+  if(roleKey==='manager'){showToast('صلاحية المدير ثابتة ولا يمكن تعديلها','error');return;}
   const allPages=Object.keys(PAGE_NAMES);
   const currentPages=BUILTIN_ROLES[roleKey]?.pages||[];
   document.getElementById('MC').innerHTML=`
@@ -2953,6 +2958,7 @@ function editBuiltinRole(roleKey, roleLabel){
 }
 
 async function saveBuiltinRole(roleKey){
+  if(roleKey==='manager'){showToast('لا يمكن تعديل صلاحية المدير','error');closeModal();return;}
   const allPages=Object.keys(PAGE_NAMES);
   const pages=allPages.filter(p=>document.getElementById('brp-'+p)?.checked);
   BUILTIN_ROLES[roleKey].pages=pages;
