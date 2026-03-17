@@ -3034,6 +3034,7 @@ async function doFormat(){
 // ===== DELIVERY EDIT & INVOICE =====
 function openEditDelivery(delId){
   const d=db.deliveries.find(x=>x.id===delId);if(!d)return;
+  const canEditIns=currentUser.role==='manager'||canDo('canEditDeliveryRecord');
   const pays=(cfg.payMethods||[]).map(t=>`<option ${d.payMethod===t?'selected':''}>${t}</option>`).join('');
   document.getElementById('MC').innerHTML=`
   <div class="overlay" onclick="if(event.target===this)closeModal()">
@@ -3046,6 +3047,20 @@ function openEditDelivery(delId){
         <div class="fg"><label>المبلغ المستلم (ر.س)</label><input type="number" id="edAmt" value="${d.receivedAmount||0}"></div>
         <div class="fg"><label>طريقة الدفع</label><select id="edPay">${pays}</select></div>
         <div class="fg"><label>التاريخ</label><input type="date" id="edDate" value="${d.date}"></div>
+        ${canEditIns?`
+        <div style="border-top:1px solid rgba(201,168,76,.1);padding-top:12px;margin-top:4px">
+          <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:9px">🛡️ التأمين</div>
+          <div class="fgrid">
+            <div class="fg"><label>مبلغ التأمين (ر.س)</label><input type="number" id="edIns" value="${d.insuranceAmount||0}"></div>
+            <div class="fg"><label>حالة التأمين</label>
+              <select id="edInsStatus">
+                <option value="pending" ${(d.insuranceStatus||'pending')==='pending'?'selected':''}>لم يُحصَّل بعد</option>
+                <option value="collected" ${d.insuranceStatus==='collected'?'selected':''}>تم التحصيل</option>
+                <option value="returned" ${d.insuranceStatus==='returned'?'selected':''}>تم الاسترداد</option>
+              </select>
+            </div>
+          </div>
+        </div>`:''}
       </div>
       <div class="m-foot">
         <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
@@ -3057,6 +3072,10 @@ function openEditDelivery(delId){
 
 async function saveEditDelivery(delId){
   const d=db.deliveries.find(x=>x.id===delId);if(!d)return;
+  const newInsAmt=parseFloat(document.getElementById('edIns')?.value)||0;
+  const newInsStatus=document.getElementById('edInsStatus')?.value||d.insuranceStatus||'pending';
+  const oldInsStatus=d.insuranceStatus||'pending';
+  const today=new Date().toISOString().split('T')[0];
   showLoading('جاري الحفظ...');
   await sb.from('deliveries').update({
     client:document.getElementById('edClient').value,
@@ -3065,8 +3084,26 @@ async function saveEditDelivery(delId){
     received_amount:parseFloat(document.getElementById('edAmt').value)||0,
     pay_method:document.getElementById('edPay').value,
     date:document.getElementById('edDate').value,
+    insurance_amount:newInsAmt,
+    insurance_status:newInsStatus,
   }).eq('id',delId);
-  await logAudit('تعديل تسليم','deliveries',delId,d.client);
+  // Insurance status changed → record income/expense
+  if(newInsAmt>0&&newInsStatus!==oldInsStatus){
+    if(newInsStatus==='collected'&&oldInsStatus!=='collected'){
+      // Collected → income
+      await sb.from('expenses').insert({
+        date:today,cat_main:'تأمين',cat_sub:'استلام تأمين تسليم',
+        description:`تأمين تسليم - ${d.client}`,amount:-newInsAmt,
+      });
+    }else if(newInsStatus==='returned'&&oldInsStatus!=='returned'){
+      // Returned → expense
+      await sb.from('expenses').insert({
+        date:today,cat_main:'تأمين',cat_sub:'استرداد تأمين تسليم',
+        description:`استرداد تأمين تسليم - ${d.client}`,amount:newInsAmt,
+      });
+    }
+  }
+  await logAudit('تعديل تسليم','deliveries',delId,`${d.client} - تأمين: ${newInsStatus}`);
   await fetchAll();hideLoading();closeModal();renderDeliveries();
   showToast('تم التعديل ✓','success');
 }
