@@ -430,7 +430,8 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 
     <!-- REPORTS -->
     <div class="page" id="page-reports">
-      <div class="topbar"><div><div class="pg-title">التقارير المالية</div></div>
+      <div class="topbar">
+        <div><div class="pg-title">التقارير المالية</div></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="date" class="fi" id="repFrom" onchange="renderReports()">
           <span style="color:var(--gr)">إلى</span>
@@ -438,21 +439,23 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
           <button class="btn-sm" onclick="printReports()">🖨️ طباعة</button>
         </div>
       </div>
-      <div class="fin-grid" id="finGrid" style="grid-template-columns:repeat(4,1fr)"></div>
-      <div class="charts-grid">
-        <div class="chart-card"><div class="chart-ttl">طرق الدفع</div><canvas id="cPay" height="200"></canvas></div>
-        <div class="chart-card"><div class="chart-ttl">نوع الطلبات</div><canvas id="cType" height="200"></canvas></div>
-        <div class="chart-card"><div class="chart-ttl">حالة الطلبات</div><canvas id="cStatus" height="200"></canvas></div>
-        <div class="chart-card"><div class="chart-ttl">نوع المنتج</div><canvas id="cProd" height="200"></canvas></div>
-        <div class="chart-card"><div class="chart-ttl">التأمين (مسترد / غير مسترد)</div><canvas id="cIns" height="110"></canvas></div>
-        <div class="chart-card"><div class="chart-ttl">طلبات الموظفين</div><canvas id="cEmp" height="110"></canvas></div>
+      <div class="fin-grid" id="finGrid" style="grid-template-columns:repeat(5,1fr)"></div>
+      <div class="sec-hdr" style="margin-top:4px"><div class="sec-ttl">📊 إحصائيات الطلبات</div></div>
+      <div id="orderStatsGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+        <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">طرق الدفع</div><table><thead><tr><th>الطريقة</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="payMethodsTbl"></tbody></table></div>
+        <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">أنواع الطلبات</div><table><thead><tr><th>النوع</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="orderTypesTbl"></tbody></table></div>
+        <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">حالة الطلبات</div><table><thead><tr><th>الحالة</th><th>العدد</th></tr></thead><tbody id="orderStatusTbl"></tbody></table></div>
+        <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">أنواع المنتجات</div><table><thead><tr><th>المنتج</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="productsTbl"></tbody></table></div>
       </div>
+      <div class="sec-hdr"><div class="sec-ttl">💸 تحليل المصروفات</div></div>
+      <div id="expBreakdown" style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:14px"></div>
+      <div class="tw" style="margin-bottom:18px"><table><thead><tr><th>البند</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="expDetailTbl"></tbody></table></div>
       <div class="sec-hdr"><div class="sec-ttl">تقرير الموظفين</div></div>
-      <div class="tw"><table><thead><tr><th>الموظف</th><th>عدد الطلبات</th><th>إجمالي المبيعات</th><th>الإيرادات المحصّلة</th><th>المتبقي</th></tr></thead><tbody id="empRepTbl"></tbody></table></div>
+      <div class="tw"><table><thead><tr><th>الموظف</th><th>عدد الطلبات</th><th>إجمالي المبيعات</th><th>المحصّل</th><th>المتبقي</th></tr></thead><tbody id="empRepTbl"></tbody></table></div>
       <div class="sec-hdr" style="margin-top:15px"><div class="sec-ttl">التحليل الشهري</div></div>
       <div class="tw"><table><thead><tr><th>الشهر</th><th>المبيعات</th><th>المحصّل</th><th>مرتجعات</th><th>مصروفات</th><th>الربح</th><th>الطلبات</th></tr></thead><tbody id="monthTbl"></tbody></table></div>
     </div>
-
     <!-- EMPLOYEES -->
     <div class="page" id="page-employees">
       <div class="topbar"><div><div class="pg-title">الموظفون</div></div>
@@ -2045,84 +2048,71 @@ function printReturnInvoice(o,amt,date,items,type){
 function renderReports(){
   const from=new Date(document.getElementById('repFrom').value);
   const to=new Date(document.getElementById('repTo').value);to.setHours(23,59,59);
-  const fOrders=db.orders.filter(o=>{const d=new Date(o.orderDate);return d>=from&&d<=to;});
+  const fOrders=db.orders.filter(o=>!o.isDraft&&o.orderDate&&(new Date(o.orderDate))>=from&&(new Date(o.orderDate))<=to);
   const fExp=db.expenses.filter(e=>{const d=new Date(e.date);return d>=from&&d<=to;});
-  const insIncome=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)<0).reduce((s,e)=>s+Math.abs(e.amount||0),0);
-  const insOut=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
+  const fReturns=db.returns.filter(r=>{const d=new Date(r.date);return d>=from&&d<=to;});
+  const fDeliveries=db.deliveries.filter(d=>{const dt=new Date(d.date);return dt>=from&&dt<=to;});
   const sales=fOrders.reduce((s,o)=>s+calcFinal(o),0);
   const collected=fOrders.reduce((s,o)=>s+calcPaid(o),0);
   const expenses=fExp.filter(e=>(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
   const uncollected=fOrders.reduce((s,o)=>s+Math.max(0,calcRem(o)),0);
-  // Returns filtered by RETURN DATE (not order date)
-  const fReturns=db.returns.filter(r=>{const d=new Date(r.date);return d>=from&&d<=to;});
-  const returnsCount=fReturns.length;
   const returnsAmt=fReturns.reduce((s,r)=>s+(r.amount||0),0);
-  // Net collected = orders collected - returns
   const netCollected=collected-returnsAmt;
   const profit=netCollected-expenses;
+  const insIncome=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)<0).reduce((s,e)=>s+Math.abs(e.amount||0),0);
+  const insOut=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
   document.getElementById('finGrid').innerHTML=`
     <div class="fin-card"><div class="fc-lbl">عدد الطلبات</div><div class="fc-val" style="color:var(--blue)">${fOrders.length}</div></div>
-    <div class="fin-card"><div class="fc-lbl">المبيعات</div><div class="fc-val" style="color:var(--gold)">${sales.toLocaleString()}<span style="font-size:11px"> ر.س</span></div></div>
-    <div class="fin-card"><div class="fc-lbl">الإيرادات المحصّلة</div><div class="fc-val" style="color:var(--green)">${collected.toLocaleString()}<span style="font-size:11px"> ر.س</span></div></div>
-    <div class="fin-card"><div class="fc-lbl">متبقي غير محصل</div><div class="fc-val" style="color:var(--orange)">${uncollected.toLocaleString()}<span style="font-size:11px"> ر.س</span></div></div>
-    <div class="fin-card"><div class="fc-lbl">المصروفات</div><div class="fc-val" style="color:var(--red)">${expenses.toLocaleString()}<span style="font-size:11px"> ر.س</span></div></div>
-    <div class="fin-card" style="border:1px solid rgba(192,57,43,.3)"><div class="fc-lbl">المرتجعات (${returnsCount})</div><div class="fc-val" style="color:var(--red)">- ${returnsAmt.toLocaleString()}<span style="font-size:11px"> ر.س</span></div></div>
-    <div class="fin-card" style="border:1px solid rgba(201,168,76,.3)"><div class="fc-lbl">صافي الإيرادات</div><div class="fc-val" style="color:var(--gold)">${netCollected.toLocaleString()}<span style="font-size:11px"> ر.س</span></div></div>
-    <div class="fin-card" style="border:1px solid rgba(39,174,96,.3)"><div class="fc-lbl">صافي الربح</div><div class="fc-val" style="color:${profit>=0?'var(--green)':'var(--red)'}">${profit.toLocaleString()}<span style="font-size:11px"> ر.س</span></div></div>
+    <div class="fin-card"><div class="fc-lbl">المبيعات</div><div class="fc-val" style="color:var(--gold)">${sales.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card"><div class="fc-lbl">المحصّل</div><div class="fc-val" style="color:var(--green)">${collected.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card"><div class="fc-lbl">غير محصل</div><div class="fc-val" style="color:var(--orange)">${uncollected.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card"><div class="fc-lbl">المصروفات</div><div class="fc-val" style="color:var(--red)">${expenses.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card"><div class="fc-lbl">المرتجعات (${fReturns.length})</div><div class="fc-val" style="color:var(--red)">-${returnsAmt.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card"><div class="fc-lbl">صافي الإيرادات</div><div class="fc-val" style="color:var(--gold)">${netCollected.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card"><div class="fc-lbl">صافي الربح</div><div class="fc-val" style="color:${profit>=0?'var(--green)':' var(--red)'}">${profit.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card"><div class="fc-lbl">تأمين محصّل</div><div class="fc-val" style="color:var(--blue)">${insIncome.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card"><div class="fc-lbl">تأمين مسترد</div><div class="fc-val" style="color:var(--orange)">${insOut.toLocaleString()}<small> ر.س</small></div></div>
   `;
-  const C=['#C9A84C','#27AE60','#2980B9','#8E44AD','#E67E22','#C0392B','#16A085','#D35400'];
-  function mkChart(id,type,labels,data,colors){
-    if(chartInst[id]){chartInst[id].destroy();}
-    const ctx=document.getElementById(id);if(!ctx)return;
-    const isBar=type==='bar';
-    chartInst[id]=new Chart(ctx,{type,data:{labels,datasets:[{data,backgroundColor:colors||C,borderColor:isBar?(colors||C):undefined,borderWidth:isBar?2:0,borderRadius:isBar?3:0}]},options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#888',font:{family:'Tajawal',size:10},boxWidth:10}}},scales:isBar?{x:{ticks:{color:'#888',font:{family:'Tajawal'}},grid:{color:'rgba(255,255,255,.04)'}},y:{ticks:{color:'#888',font:{family:'Tajawal'}},grid:{color:'rgba(255,255,255,.04)'}}}:{}}});
-  }
-  const pays={};fOrders.forEach(o=>{const m=(o.payMethod||'غير محدد').split('-')[0];pays[m]=(pays[m]||0)+(o.amount||0);});
-  mkChart('cPay','doughnut',Object.keys(pays),Object.values(pays));
-  const types={};fOrders.forEach(o=>{types[o.orderType||'?']=(types[o.orderType||'?']||0)+1;});
-  mkChart('cType','doughnut',Object.keys(types),Object.values(types));
-  const stats={};fOrders.forEach(o=>{stats[o.status||'?']=(stats[o.status||'?']||0)+1;});
-  mkChart('cStatus','doughnut',Object.keys(stats),Object.values(stats));
-  const prods={};fOrders.forEach(o=>{prods[o.dressType||'?']=(prods[o.dressType||'?']||0)+1;});
-  mkChart('cProd','doughnut',Object.keys(prods),Object.values(prods));
-  const insR=fOrders.reduce((s,o)=>s+(o.insuranceReturned?(o.insurance||0):0),0);
-  const insN=fOrders.reduce((s,o)=>s+(!o.insuranceReturned?(o.insurance||0):0),0);
-  mkChart('cIns','bar',['مسترد','غير مسترد'],[insR,insN],['#27AE60','#C0392B']);
-  const empO={};fOrders.forEach(o=>{const e=o.employee||'غير محدد';empO[e]=(empO[e]||0)+1;});
-  mkChart('cEmp','bar',Object.keys(empO),Object.values(empO));
-  // Employee report table
-  const empData={};
-  fOrders.forEach(o=>{const e=o.employee||'غير محدد';if(!empData[e])empData[e]={count:0,sales:0,collected:0,remaining:0};empData[e].count++;empData[e].sales+=calcFinal(o);empData[e].collected+=calcPaid(o);empData[e].remaining+=Math.max(0,calcRem(o));});
-  document.getElementById('empRepTbl').innerHTML=Object.entries(empData).map(([e,d])=>`<tr>
-    <td style="font-weight:700">${e}</td><td style="color:var(--blue)">${d.count}</td>
-    <td style="color:var(--gold)">${d.sales.toLocaleString()} ر.س</td>
-    <td style="color:var(--green)">${d.collected.toLocaleString()} ر.س</td>
-    <td style="color:${d.remaining>0?'var(--red)':'var(--green)'}">${d.remaining.toLocaleString()} ر.س</td>
-  </tr>`).join('');
-  // Monthly
+  const firstStep=(cfg.trackingSteps||[])[0]?.name||'استلام الطلب';
+  const inProgress=fOrders.filter(o=>o.status!=='تم التسليم'&&o.status!=='الحمدلله'&&o.status!==firstStep).length;
+  const delivInOrders=fOrders.filter(o=>o.status==='تم التسليم').length;
+  const insNotRet=fOrders.filter(o=>o.insurance>0&&!o.insuranceReturned);
+  const insRet=fOrders.filter(o=>o.insurance>0&&o.insuranceReturned);
+  const notFullyPaid=fOrders.filter(o=>calcRem(o)>0);
+  const discounted=fOrders.filter(o=>o.discountType&&o.discountType!=='none'&&o.discountValue>0);
+  const totalDiscount=discounted.reduce((s,o)=>s+calcDisc(o),0);
+  const osg=document.getElementById('orderStatsGrid');
+  if(osg)osg.innerHTML=`
+    <div class="stat-card sc-blue"><div class="s-lbl">قيد التنفيذ</div><div class="s-val">${inProgress}</div><div class="s-icon">⏳</div></div>
+    <div class="stat-card sc-green"><div class="s-lbl">تسليم بالطلبات</div><div class="s-val">${delivInOrders}</div><div class="s-sub">${fDeliveries.length} تسليم مستقل</div><div class="s-icon">📦</div></div>
+    <div class="stat-card sc-orange"><div class="s-lbl">تأمين غير مسترد</div><div class="s-val">${insNotRet.length}</div><div class="s-sub">${insNotRet.reduce((s,o)=>s+(o.insurance||0),0).toLocaleString()} ر.س</div><div class="s-icon">🛡️</div></div>
+    <div class="stat-card sc-green"><div class="s-lbl">تأمين مسترد</div><div class="s-val">${insRet.length}</div><div class="s-sub">${insRet.reduce((s,o)=>s+(o.insurance||0),0).toLocaleString()} ر.س</div><div class="s-icon">✅</div></div>
+    <div class="stat-card sc-red"><div class="s-lbl">لم تُحصَّل كاملاً</div><div class="s-val">${notFullyPaid.length}</div><div class="s-sub">${notFullyPaid.reduce((s,o)=>s+calcRem(o),0).toLocaleString()} ر.س</div><div class="s-icon">💰</div></div>
+    <div class="stat-card sc-gold"><div class="s-lbl">طلبات بخصم</div><div class="s-val">${discounted.length}</div><div class="s-sub">إجمالي: ${totalDiscount.toLocaleString()} ر.س</div><div class="s-icon">🏷️</div></div>
+    <div class="stat-card sc-red"><div class="s-lbl">المرتجعات</div><div class="s-val">${fReturns.length}</div><div class="s-sub">${returnsAmt.toLocaleString()} ر.س</div><div class="s-icon">↩️</div></div>
+    <div class="stat-card sc-blue"><div class="s-lbl">المسودات</div><div class="s-val">${db.orders.filter(o=>o.isDraft).length}</div><div class="s-icon">📋</div></div>
+  `;
+  const payMap={};fOrders.forEach(o=>{const m=o.payMethod||'غير محدد';if(!payMap[m])payMap[m]={count:0,total:0};payMap[m].count++;payMap[m].total+=calcFinal(o);});
+  const pmt=document.getElementById('payMethodsTbl');if(pmt)pmt.innerHTML=Object.entries(payMap).map(([k,v])=>`<tr><td>${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--gold)">${v.total.toLocaleString()} ر.س</td></tr>`).join('');
+  const typeMap={};fOrders.forEach(o=>{const t=o.orderType||'غير محدد';if(!typeMap[t])typeMap[t]={count:0,total:0};typeMap[t].count++;typeMap[t].total+=calcFinal(o);});
+  const ott=document.getElementById('orderTypesTbl');if(ott)ott.innerHTML=Object.entries(typeMap).map(([k,v])=>`<tr><td>${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--gold)">${v.total.toLocaleString()} ر.س</td></tr>`).join('');
+  const statusMap={};fOrders.forEach(o=>{const s=o.status||'غير محدد';statusMap[s]=(statusMap[s]||0)+1;});
+  const ost=document.getElementById('orderStatusTbl');if(ost)ost.innerHTML=Object.entries(statusMap).map(([k,v])=>`<tr><td>${k}</td><td style="color:var(--blue)">${v}</td></tr>`).join('');
+  const prodMap={};fOrders.forEach(o=>{const items=o.extraItems&&o.extraItems.length>0?o.extraItems:[{name:o.dressType||'غير محدد',price:calcFinal(o)}];items.forEach(it=>{const n=it.name||'غير محدد';if(!prodMap[n])prodMap[n]={count:0,total:0};prodMap[n].count++;prodMap[n].total+=(it.price||0);});});
+  const pt=document.getElementById('productsTbl');if(pt)pt.innerHTML=Object.entries(prodMap).map(([k,v])=>`<tr><td>${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--gold)">${v.total.toLocaleString()} ر.س</td></tr>`).join('');
+  const expMap={};fExp.filter(e=>(e.amount||0)>0).forEach(e=>{const c=e.catMain||'غير محدد';if(!expMap[c])expMap[c]={count:0,total:0};expMap[c].count++;expMap[c].total+=(e.amount||0);});
+  const fSals=db.salaries.filter(s=>{const d=new Date(s.date);return d>=from&&d<=to;});
+  const salTotal=fSals.filter(s=>s.type==='salary').reduce((sum,s)=>sum+(s.amount||0),0);
+  const withTotal=fSals.filter(s=>s.type==='withdrawal').reduce((sum,s)=>sum+(s.amount||0),0);
+  if(salTotal>0){if(!expMap['رواتب'])expMap['رواتب']={count:0,total:0};expMap['رواتب'].count+=fSals.filter(s=>s.type==='salary').length;expMap['رواتب'].total+=salTotal;}
+  if(withTotal>0){if(!expMap['سحبيات'])expMap['سحبيات']={count:0,total:0};expMap['سحبيات'].count+=fSals.filter(s=>s.type==='withdrawal').length;expMap['سحبيات'].total+=withTotal;}
+  const eb=document.getElementById('expBreakdown');if(eb)eb.innerHTML=Object.entries(expMap).map(([k,v])=>`<div class="stat-card sc-red"><div class="s-lbl">${k}</div><div class="s-val" style="font-size:16px">${v.total.toLocaleString()}<small style="font-size:10px"> ر.س</small></div><div class="s-sub">${v.count} عملية</div></div>`).join('');
+  const edt=document.getElementById('expDetailTbl');if(edt)edt.innerHTML=Object.entries(expMap).map(([k,v])=>`<tr><td style="font-weight:700">${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--red)">${v.total.toLocaleString()} ر.س</td></tr>`).join('');
+  const empData={};fOrders.forEach(o=>{const e=o.employee||'غير محدد';if(!empData[e])empData[e]={count:0,sales:0,collected:0,remaining:0};empData[e].count++;empData[e].sales+=calcFinal(o);empData[e].collected+=calcPaid(o);empData[e].remaining+=Math.max(0,calcRem(o));});
+  const ert=document.getElementById('empRepTbl');if(ert)ert.innerHTML=Object.entries(empData).map(([e,d])=>`<tr><td style="font-weight:700">${e}</td><td style="color:var(--blue)">${d.count}</td><td style="color:var(--gold)">${d.sales.toLocaleString()} ر.س</td><td style="color:var(--green)">${d.collected.toLocaleString()} ر.س</td><td style="color:${d.remaining>0?'var(--red)':' var(--green)'}">${d.remaining.toLocaleString()} ر.س</td></tr>`).join('');
   const months=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-  document.getElementById('monthTbl').innerHTML=months.map((m,i)=>{
-    const mo=db.orders.filter(o=>new Date(o.orderDate).getMonth()===i);
-    const me=db.expenses.filter(e=>new Date(e.date).getMonth()===i);
-    const mr=db.returns.filter(r=>new Date(r.date).getMonth()===i);
-    const ms=mo.reduce((s,o)=>s+calcFinal(o),0);
-    const mc=mo.reduce((s,o)=>s+calcPaid(o),0);
-    const mx=me.reduce((s,e)=>s+(e.amount||0),0);
-    const mret=mr.reduce((s,r)=>s+(r.amount||0),0);
-    const mnet=mc-mret;
-    if(!ms&&!mx&&!mret)return'';
-    return`<tr>
-      <td style="font-weight:700">${m}</td>
-      <td style="color:var(--gold)">${ms.toLocaleString()}</td>
-      <td style="color:var(--green)">${mc.toLocaleString()}</td>
-      <td style="color:var(--red)">${mret>0?'- '+mret.toLocaleString():'-'}</td>
-      <td style="color:var(--blue)">${mx.toLocaleString()}</td>
-      <td style="color:${mnet-mx>=0?'var(--gold)':'var(--red)'};font-weight:700">${(mnet-mx).toLocaleString()}</td>
-      <td>${mo.length}</td>
-    </tr>`;
-  }).join('');
+  const mt=document.getElementById('monthTbl');if(mt)mt.innerHTML=months.map((m,i)=>{const mo=db.orders.filter(o=>!o.isDraft&&o.orderDate&&new Date(o.orderDate).getMonth()===i);const me=db.expenses.filter(e=>new Date(e.date).getMonth()===i&&(e.amount||0)>0);const mr=db.returns.filter(r=>new Date(r.date).getMonth()===i);const ms=mo.reduce((s,o)=>s+calcFinal(o),0);const mc=mo.reduce((s,o)=>s+calcPaid(o),0);const mx=me.reduce((s,e)=>s+(e.amount||0),0);const mret=mr.reduce((s,r)=>s+(r.amount||0),0);const mnet=mc-mret;if(!ms&&!mx&&!mret)return'';return`<tr><td style="font-weight:700">${m}</td><td style="color:var(--gold)">${ms.toLocaleString()}</td><td style="color:var(--green)">${mc.toLocaleString()}</td><td style="color:var(--red)">${mret>0?'- '+mret.toLocaleString():'-'}</td><td style="color:var(--blue)">${mx.toLocaleString()}</td><td style="color:${mnet-mx>=0?'var(--gold)':' var(--red)'};font-weight:700">${(mnet-mx).toLocaleString()}</td><td>${mo.length}</td></tr>`;}).join('');
 }
-
 function printReports(){
   const pa=document.getElementById('printArea');pa.style.display='flex';pa.style.flexDirection='column';pa.style.alignItems='center';
   pa.innerHTML=`<div style="font-family:Tajawal,sans-serif;direction:rtl;padding:16px;width:100%;max-width:700px;background:white;color:#111">
