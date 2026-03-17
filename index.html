@@ -564,15 +564,12 @@ async function loadSettings(){
   cfg={...DEF};
   (data||[]).forEach(r=>{try{cfg[r.key]=r.value;}catch(e){}});
   // Load editable builtin roles if saved
-  if(cfg.builtinRoles){
-    Object.keys(cfg.builtinRoles).forEach(k=>{
-      // NEVER override manager - manager always has all pages
-      if(k==='manager')return;
-      if(BUILTIN_ROLES[k]){
-        BUILTIN_ROLES[k].pages=cfg.builtinRoles[k].pages||BUILTIN_ROLES[k].pages;
-      }
-    });
-  }
+  // Load individual role page overrides (not builtinRoles to avoid manager issues)
+  Object.keys(BUILTIN_ROLES).forEach(k=>{
+    if(k==='manager')return; // manager never overridden
+    const saved=cfg['role_pages_'+k];
+    if(saved&&saved.pages)BUILTIN_ROLES[k].pages=saved.pages;
+  });
 }
 async function saveSetting(key,value){
   await sb.from('settings').upsert({key,value,updated_at:new Date().toISOString()},{onConflict:'key'});
@@ -683,6 +680,8 @@ async function doLogin(){
     }
     try{
       await loadSettings();
+      // Clean up old builtinRoles setting that caused settings page to disappear
+      await sb.from('settings').delete().eq('key','builtinRoles').then(()=>{}).catch(()=>{});
       await fetchAll();
     }catch(fe){
       hideLoading();
@@ -2962,9 +2961,9 @@ async function saveBuiltinRole(roleKey){
   const allPages=Object.keys(PAGE_NAMES);
   const pages=allPages.filter(p=>document.getElementById('brp-'+p)?.checked);
   BUILTIN_ROLES[roleKey].pages=pages;
-  if(!cfg.builtinRoles)cfg.builtinRoles={};
-  cfg.builtinRoles[roleKey]={pages};
-  await saveSetting('builtinRoles',cfg.builtinRoles);
+  // Save each role separately to avoid conflicts
+  await saveSetting('role_pages_'+roleKey, {pages});
+  cfg['role_pages_'+roleKey]={pages};
   closeModal();renderSettings();
   showToast('تم تحديث الصلاحية ✓','success');
 }
