@@ -564,12 +564,14 @@ async function loadSettings(){
   cfg={...DEF};
   (data||[]).forEach(r=>{try{cfg[r.key]=r.value;}catch(e){}});
   // Load editable builtin roles if saved
-  // Load individual role page overrides (not builtinRoles to avoid manager issues)
+  // Load individual role page overrides
   Object.keys(BUILTIN_ROLES).forEach(k=>{
-    if(k==='manager')return; // manager never overridden
-    const saved=cfg['role_pages_'+k];
-    if(saved&&saved.pages)BUILTIN_ROLES[k].pages=saved.pages;
+    if(k==='manager')return; // manager ALWAYS has all pages - never overridden
+    const key='role_pages_'+k;
+    if(cfg[key]&&cfg[key].pages)BUILTIN_ROLES[k].pages=cfg[key].pages;
   });
+  // Force manager to always have all pages
+  BUILTIN_ROLES.manager.pages=Object.keys(PAGE_NAMES);
 }
 async function saveSetting(key,value){
   await sb.from('settings').upsert({key,value,updated_at:new Date().toISOString()},{onConflict:'key'});
