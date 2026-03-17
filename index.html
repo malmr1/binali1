@@ -972,6 +972,7 @@ function renderOrders(){
       <td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--blue)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'💰 محصّل'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         <button class="btn-sm" onclick="showTracking(${o.id})">تتبع</button>
+        ${(currentUser.role==='manager'||canDo('canEditOrders'))?`<button class="btn-sm" onclick="openEditOrderModal(${o.id})">✏️ تعديل</button>`:''}
         ${o.isDraft?`<button class="btn-sm green" onclick="confirmDraft(${o.id})">✅ تأكيد</button>`:`<button class="btn-sm blue" onclick="openOrderActions(${o.id})">إجراءات</button>`}
         <button class="btn-sm green" onclick="printInvoice(${o.id})">🖨️ فاتورة</button>
         <button class="btn-sm" onclick="printMeasurements(${o.id})">📐 مقاسات</button>
@@ -1030,7 +1031,6 @@ function openOrderModal(){
           </div>
 
           <div class="fg"><label>المبلغ الكلي (ر.س) <span style="font-size:9px;color:var(--gr)">يتعبأ تلقائياً</span></label><input type="number" id="fAmt" oninput="calcDiscPreview()" placeholder="0" readonly style="color:var(--gold)"></div>
-          <div class="fg"><label>طريقة الدفع</label><select id="fPay">${pays}</select></div>
           <div class="fg"><label>طريقة دفع العربون</label>
             <select id="fDepMeth" onchange="toggleDepSplit(this.value)">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
           </div>
@@ -1181,7 +1181,7 @@ async function saveNewOrder(isDraft=false){
     order_date:document.getElementById('fODate').value||null,delivery_date:document.getElementById('fDDate').value||null,
     amount:parseFloat(document.getElementById('fAmt').value)||0,
     deposit:parseFloat(document.getElementById('fDep').value)||0,
-    pay_method:document.getElementById('fDepMeth')?.value==='__split__'?'مختلط':document.getElementById('fPay').value,
+    pay_method:document.getElementById('fDepMeth')?.value==='__split__'?'مختلط':(document.getElementById('fDepMeth')?.value||'نقدي'),
     deposit_split:{cash:parseFloat(document.getElementById('fDepCash')?.value)||0,card:parseFloat(document.getElementById('fDepCard')?.value)||0},
     insurance:parseFloat(document.getElementById('fIns')?.value)||0,
     insurance_returned:false,
