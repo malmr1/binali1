@@ -3540,7 +3540,7 @@ async function saveEditAttendanceReport(id){
 
 
 // ===== MULTI-SHOP =====
-const SUPER_ADMIN_USER = 'admin'; // username of super admin
+const SUPER_ADMIN_USER = 'admin123'; // username of super admin
 
 async function loadShops(){
   const{data}=await sb.from('shops').select('*').order('id');
@@ -3551,7 +3551,7 @@ async function loadShops(){
 async function initShop(){
   await loadShops();
   // Determine if super admin
-  isSuperAdmin=currentUser.username===SUPER_ADMIN_USER||currentUser.role==='manager'&&!currentUser.shopId;
+  isSuperAdmin=currentUser.username===SUPER_ADMIN_USER||currentUser.role==='manager';
   if(isSuperAdmin){
     // Super admin sees all shops, defaults to shop 1
     currentShop=allShops.find(s=>s.id===(currentUser.shopId||1))||allShops[0];
