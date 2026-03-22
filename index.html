@@ -750,11 +750,12 @@ document.addEventListener('keydown',e=>{
 });
 
 // ===== INIT APP =====
-function initApp(){
+async function initApp(){
+  await initShop();
   document.getElementById('sbName').textContent=currentUser.name;
   document.getElementById('sbRole').textContent=getRoleLabel(currentUser.role);
   document.getElementById('sbAv').textContent=currentUser.name[0];
-  document.getElementById('sbShopSub').textContent=cfg.shopName||'نظام الإدارة';
+  document.getElementById('sbShopSub').textContent=currentShop?.name||cfg.shopName||'نظام الإدارة';
   const pages=getRolePages(currentUser.role);
   const nav=document.getElementById('sbNav');nav.innerHTML='';
   pages.forEach(p=>{
