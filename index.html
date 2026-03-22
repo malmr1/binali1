@@ -276,7 +276,10 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <button class="hamburger" onclick="toggleSidebar()">☰</button>
   </div>
   <div class="sidebar" id="sidebar">
-    <div class="sb-logo" style="display:flex;align-items:center;gap:10px"><div id="sbLogoImg"></div><div><div class="sb-brand">بن علي</div><div class="sb-sub" id="sbShopSub">نظام الإدارة</div></div></div>
+    <div class="sb-logo" style="display:flex;align-items:center;gap:10px"><div id="sbLogoImg"></div><div><div class="sb-brand" id="sbBrand">بن علي</div><div class="sb-sub" id="sbShopSub">نظام الإدارة</div></div></div>
+    <div id="shopSwitcherWrap" style="display:none;padding:6px 12px">
+      <select id="shopSwitcher" onchange="switchShop(this.value)" style="width:100%;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:2px;padding:5px 8px;color:var(--white);font-family:Tajawal,sans-serif;font-size:11px;outline:none;cursor:pointer"></select>
+    </div>
     <div class="sb-user"><div class="u-av" id="sbAv">م</div><div><div class="u-name" id="sbName">-</div><div class="u-role" id="sbRole">-</div></div></div>
     <nav class="sb-nav" id="sbNav"></nav>
     <div class="sb-foot"><button class="btn-logout" onclick="doLogout()">🚪 تسجيل الخروج</button></div>
@@ -3569,6 +3572,8 @@ async function initShop(){
   // Update sidebar shop name
   const sbSub=document.getElementById('sbShopSub');
   if(sbSub)sbSub.textContent=currentShop?.name||'بن علي';
+  const sbBrand=document.getElementById('sbBrand');
+  if(sbBrand)sbBrand.textContent=currentShop?.name||'بن علي';
 }
 
 async function switchShop(shopId){
