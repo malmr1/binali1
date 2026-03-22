@@ -519,6 +519,9 @@ const sb=supabase.createClient(SURL,SKEY);
 let db={users:[],orders:[],expenses:[],attendance:[],salaries:[],returns:[],deliveries:[],audit:[]};
 let cfg={};
 let currentUser=null;
+let currentShop=null;
+let allShops=[];
+let isSuperAdmin=false;
 let nextInvoice=100;
 let chartInst={};
 let userLoc=null;
@@ -560,7 +563,8 @@ function toggleEye(id,btn){const i=document.getElementById(id);if(i.type==='pass
 
 // ===== SETTINGS LOAD =====
 async function loadSettings(){
-  const{data}=await sb.from('settings').select('*');
+  const sid=currentShop?.id||1;
+  const{data}=await sb.from('settings').select('*').eq('shop_id',sid);
   cfg={...DEF};
   (data||[]).forEach(r=>{try{cfg[r.key]=r.value;}catch(e){}});
   // Load editable builtin roles if saved
@@ -571,10 +575,11 @@ async function loadSettings(){
     if(cfg[key]&&cfg[key].pages)BUILTIN_ROLES[k].pages=cfg[key].pages;
   });
   // Force manager to always have all pages
-  BUILTIN_ROLES.manager.pages=Object.keys(PAGE_NAMES);
+  BUILTIN_ROLES.manager.pages=['dashboard','orders','tracking','attendance','attend-report','salaries','expenses','returns','reports','employees','settings','audit'];
 }
 async function saveSetting(key,value){
-  await sb.from('settings').upsert({key,value,updated_at:new Date().toISOString()},{onConflict:'key'});
+  const sid=currentShop?.id||1;
+  await sb.from('settings').upsert({key,value,shop_id:sid,updated_at:new Date().toISOString()},{onConflict:'key,shop_id'});
   cfg[key]=value;
 }
 
@@ -682,8 +687,11 @@ async function doLogin(){
     }
     try{
       await loadSettings();
-      // Clean up old builtinRoles setting that caused settings page to disappear
+      // Clean up ALL role override settings that can cause pages to disappear
       await sb.from('settings').delete().eq('key','builtinRoles').then(()=>{}).catch(()=>{});
+      await sb.from('settings').delete().eq('key','role_pages_manager').then(()=>{}).catch(()=>{});
+      // Re-force manager pages after cleanup
+      BUILTIN_ROLES.manager.pages=['dashboard','orders','tracking','attendance','attend-report','salaries','expenses','returns','reports','employees','settings','audit'];
       await fetchAll();
     }catch(fe){
       hideLoading();
@@ -2586,6 +2594,7 @@ async function saveDelivery2(){
     created_by:currentUser.name,
     insurance_amount:insAmt,
     insurance_status:insStatus,
+    shop_id:currentShop?.id||1,
   });
   await logAudit('تسليم جديد','',`${client} - ${amt.toLocaleString()} ر.س`);
   await fetchAll();hideLoading();closeModal();renderDeliveries();
@@ -3104,7 +3113,7 @@ async function saveEditDelivery(delId){
       });
     }
   }
-  await logAudit('تعديل تسليم','deliveries',delId,`${d.client} - تأمين: ${newInsStatus}`);
+  await logAudit('تعديل تسليم',delId,`${d.client} - تأمين: ${newInsStatus}`);
   await fetchAll();hideLoading();closeModal();renderDeliveries();
   showToast('تم التعديل ✓','success');
 }
@@ -3488,7 +3497,7 @@ async function deleteDelivery(id){
   if(!confirm('حذف هذا التسليم؟'))return;
   showLoading('...');
   await sb.from('deliveries').delete().eq('id',id);
-  await logAudit('حذف تسليم','deliveries',id,'');
+  await logAudit('حذف تسليم',id,'');
   await fetchAll();hideLoading();renderDeliveries();showToast('تم الحذف','error');
 }
 
@@ -3527,6 +3536,59 @@ async function saveEditAttendanceReport(id){
   }).eq('id',id);
   await logAudit('تعديل حضور','attendance',id,'');
   await fetchAll();hideLoading();closeModal();renderAttRep();showToast('تم ✓','success');
+}
+
+
+// ===== MULTI-SHOP =====
+const SUPER_ADMIN_USER = 'admin'; // username of super admin
+
+async function loadShops(){
+  const{data}=await sb.from('shops').select('*').order('id');
+  allShops=data||[];
+  return allShops;
+}
+
+async function initShop(){
+  await loadShops();
+  // Determine if super admin
+  isSuperAdmin=currentUser.username===SUPER_ADMIN_USER||currentUser.role==='manager'&&!currentUser.shopId;
+  if(isSuperAdmin){
+    // Super admin sees all shops, defaults to shop 1
+    currentShop=allShops.find(s=>s.id===(currentUser.shopId||1))||allShops[0];
+    // Show shop switcher
+    const wrap=document.getElementById('shopSwitcherWrap');
+    const sel=document.getElementById('shopSwitcher');
+    if(wrap&&sel){
+      wrap.style.display='block';
+      sel.innerHTML=allShops.map(s=>`<option value="${s.id}" ${s.id===currentShop.id?'selected':''}>${s.name}</option>`).join('');
+    }
+  }else{
+    // Regular user - assign to their shop
+    currentShop=allShops.find(s=>s.id===(currentUser.shopId||1))||allShops[0];
+  }
+  // Update sidebar shop name
+  const sbSub=document.getElementById('sbShopSub');
+  if(sbSub)sbSub.textContent=currentShop?.name||'بن علي';
+}
+
+async function switchShop(shopId){
+  currentShop=allShops.find(s=>s.id===parseInt(shopId));
+  showLoading('تحميل '+currentShop.name+'...');
+  await loadSettings();
+  await fetchAll();
+  hideLoading();
+  // Update sidebar
+  const sbSub=document.getElementById('sbShopSub');
+  if(sbSub)sbSub.textContent=currentShop?.name||'';
+  // Re-render current page
+  const activePage=document.querySelector('.page[style*="block"]');
+  if(activePage){
+    const pageId=activePage.id.replace('page-','');
+    switchPage(pageId);
+  }else{
+    switchPage('dashboard');
+  }
+  showToast('تم التبديل إلى '+currentShop.name,'success');
 }
 
 // ===== EXPORT EXCEL =====
