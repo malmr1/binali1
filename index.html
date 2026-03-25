@@ -589,15 +589,16 @@ async function saveSetting(key,value){
 // ===== FETCH ALL =====
 async function fetchAll(){
   const today=new Date().toISOString().split('T')[0];
+  const sid=currentShop?.id||1;
   const[u,o,e,a,s,r,dlv,au]=await Promise.all([
-    sb.from('users').select('*').order('id'),
-    sb.from('orders').select('*').order('invoice_number',{ascending:false}),
-    sb.from('expenses').select('*').order('date',{ascending:false}),
-    sb.from('attendance').select('*').eq('date',today),
-    sb.from('salaries').select('*').order('date',{ascending:false}),
-    sb.from('returns').select('*').order('date',{ascending:false}),
-    sb.from('deliveries').select('*').order('date',{ascending:false}).then(r=>r.error?{data:[]}:r),
-    sb.from('audit_log').select('*').order('created_at',{ascending:false}).limit(120).then(r=>r.error?{data:[]}:r),
+    sb.from('users').select('*').eq('shop_id',sid).order('id'),
+    sb.from('orders').select('*').eq('shop_id',sid).order('invoice_number',{ascending:false}),
+    sb.from('expenses').select('*').eq('shop_id',sid).order('date',{ascending:false}),
+    sb.from('attendance').select('*').eq('shop_id',sid).eq('date',today),
+    sb.from('salaries').select('*').eq('shop_id',sid).order('date',{ascending:false}),
+    sb.from('returns').select('*').eq('shop_id',sid).order('date',{ascending:false}),
+    sb.from('deliveries').select('*').eq('shop_id',sid).order('date',{ascending:false}).then(r=>r.error?{data:[]}:r),
+    sb.from('audit_log').select('*').eq('shop_id',sid).order('created_at',{ascending:false}).limit(120).then(r=>r.error?{data:[]}:r),
   ]);
   db.users=(u.data||[]).map(x=>({id:x.id,name:x.name,username:x.username,password:x.password,role:x.role,job:x.job,baseSalary:x.base_salary||0}));
   db.orders=(o.data||[]).map(x=>({
@@ -624,7 +625,7 @@ async function fetchAll(){
 }
 
 async function logAudit(action,table,recId,details){
-  try{await sb.from('audit_log').insert({user_name:currentUser.name,action,table_name:table,record_id:String(recId),details,created_at:new Date().toISOString()});}catch(e){}
+  try{await sb.from('audit_log').insert({shop_id:currentShop?.id||1,user_name:currentUser.name,action,table_name:table,record_id:String(recId),details,created_at:new Date().toISOString()});}catch(e){}
 }
 
 // ===== AUTH =====
@@ -1197,6 +1198,7 @@ async function saveNewOrder(isDraft=false){
   const tracking=isDraft?[]:[{step:'استلام الطلب',sub:'',who:currentUser.name,when:new Date().toLocaleString('ar-SA')}];
   showLoading(isDraft?'جاري حفظ المسودة...':'جاري الحفظ...');
   const{error}=await sb.from('orders').insert({
+    shop_id:currentShop?.id||1,
     invoice_number:inv,local_invoice:document.getElementById('fLocal').value||null,
     employee:document.getElementById('fEmp').value,client,phone:document.getElementById('fPhone').value,
     dress_type:getProductsList().map(p=>p.name).filter(Boolean).join(' + ')||'',
@@ -1226,6 +1228,7 @@ async function saveNewOrder(isDraft=false){
   const insCollectNew=document.getElementById('fInsCollect')?.value||'order';
   if(insAmtNew>0&&insCollectNew==='order'){
     await sb.from('expenses').insert({
+      shop_id:currentShop?.id||1,
       date:document.getElementById('fODate').value||new Date().toISOString().split('T')[0],
       cat_main:'تأمين',cat_sub:'استلام تأمين',
       description:`تأمين طلب #${inv} - ${client}`,
@@ -1341,6 +1344,7 @@ async function saveInsurance(oid){
   // If newly collected (not returned) → add as income expense
   if(!ret&&!wasReturned&&collectTime!=='delivery'&&insAmt>0){
     await sb.from('expenses').insert({
+      shop_id:currentShop?.id||1,
       date:today,cat_main:'تأمين',cat_sub:'استلام تأمين',
       description:`تأمين طلب #${oid} - ${o.client}`,
       amount:-insAmt, // negative = income marker
@@ -1349,6 +1353,7 @@ async function saveInsurance(oid){
   // If newly returned → add as expense (outgoing)
   if(ret&&!wasReturned&&insAmt>0){
     await sb.from('expenses').insert({
+      shop_id:currentShop?.id||1,
       date:today,cat_main:'تأمين',cat_sub:'استرداد تأمين',
       description:`استرداد تأمين طلب #${oid} - ${o.client}`,
       amount:insAmt,
@@ -1620,7 +1625,7 @@ async function recordAttendance(){
   if(!existing){
     // No open record - register checkin
     const shift=getCurrShift(now)||{name:'غير محدد'};
-    await sb.from('attendance').insert({user_id:currentUser.id,user_name:currentUser.name,shift:shift.name,date:today,checkin_time:time});
+    await sb.from('attendance').insert({shop_id:currentShop?.id||1,user_id:currentUser.id,user_name:currentUser.name,shift:shift.name,date:today,checkin_time:time});
     showToast(`✅ تسجيل حضور ${time}`,'success');
   }else{
     // Has open checkin - register checkout
@@ -1656,7 +1661,7 @@ async function renderAttRep(){
   const month=document.getElementById('arMonth')?.value||'';
   const empId=document.getElementById('arEmp')?.value||'';
   // Fetch attendance for selected month
-  let q=sb.from('attendance').select('*').order('date',{ascending:false});
+  let q=sb.from('attendance').select('*').eq('shop_id',currentShop?.id||1).order('date',{ascending:false});
   if(month){q=q.gte('date',month+'-01').lte('date',month+'-31');}
   if(empId){q=q.eq('user_id',parseInt(empId));}
   const{data}=await q.limit(500);
@@ -1796,9 +1801,9 @@ async function saveSalary(){
   const notes=document.getElementById('salNotes').value;
   if(!amt){showToast('أدخل المبلغ','error');return;}
   showLoading('جاري الحفظ...');
-  await sb.from('salaries').insert({employee_id:empId,employee_name:emp?.name||'',type:'salary',amount:amt,base_salary:parseFloat(document.getElementById('salBase').value)||0,month,date,notes,created_by:currentUser.name});
+  await sb.from('salaries').insert({shop_id:currentShop?.id||1,employee_id:empId,employee_name:emp?.name||'',type:'salary',amount:amt,base_salary:parseFloat(document.getElementById('salBase').value)||0,month,date,notes,created_by:currentUser.name});
   // Auto-create expense
-  await sb.from('expenses').insert({date,cat_main:'رواتب',cat_sub:emp?.name||'',description:`راتب ${emp?.name||''} - ${month}`,amount:amt});
+  await sb.from('expenses').insert({shop_id:currentShop?.id||1,date,cat_main:'رواتب',cat_sub:emp?.name||'',description:`راتب ${emp?.name||''} - ${month}`,amount:amt});
   await logAudit('صرف راتب','salaries',empId,`${emp?.name} - ${amt.toLocaleString()} ر.س`);
   await fetchAll();hideLoading();closeModal();renderSalaries();showToast('تم صرف الراتب ✓','success');
 }
@@ -1835,9 +1840,9 @@ async function saveWithdraw(){
   const notes=document.getElementById('wNotes').value;
   if(!amt){showToast('أدخل المبلغ','error');return;}
   showLoading('...');
-  await sb.from('salaries').insert({employee_id:empId,employee_name:emp?.name||'',type:'withdrawal',amount:amt,base_salary:emp?.baseSalary||0,month,date,notes,created_by:currentUser.name});
+  await sb.from('salaries').insert({shop_id:currentShop?.id||1,employee_id:empId,employee_name:emp?.name||'',type:'withdrawal',amount:amt,base_salary:emp?.baseSalary||0,month,date,notes,created_by:currentUser.name});
   // Auto-create expense
-  await sb.from('expenses').insert({date,cat_main:'سحبيات',cat_sub:emp?.name||'',description:`سحبية ${emp?.name||''} - ${month}`,amount:amt});
+  await sb.from('expenses').insert({shop_id:currentShop?.id||1,date,cat_main:'سحبيات',cat_sub:emp?.name||'',description:`سحبية ${emp?.name||''} - ${month}`,amount:amt});
   await logAudit('سحبية','salaries',empId,`${emp?.name} - ${amt.toLocaleString()} ر.س`);
   await fetchAll();hideLoading();closeModal();renderSalaries();showToast('تم تسجيل السحبية ✓','success');
 }
@@ -1889,7 +1894,7 @@ function updateExpSubs(){
 }
 
 async function saveExpense(){
-  const e={date:document.getElementById('eDate').value,cat_main:document.getElementById('eCatM').value,cat_sub:document.getElementById('eCatS').value,description:document.getElementById('eDesc').value,amount:parseFloat(document.getElementById('eAmt').value)||0};
+  const e={shop_id:currentShop?.id||1,date:document.getElementById('eDate').value,cat_main:document.getElementById('eCatM').value,cat_sub:document.getElementById('eCatS').value,description:document.getElementById('eDesc').value,amount:parseFloat(document.getElementById('eAmt').value)||0};
   showLoading('...');
   const{error}=await sb.from('expenses').insert(e);
   if(error){hideLoading();showToast('خطأ','error');return;}
@@ -2014,6 +2019,7 @@ async function saveReturn(){
   showLoading('جاري التسجيل...');
   // 1. Save return record
   const{data:retData}=await sb.from('returns').insert({
+    shop_id:currentShop?.id||1,
     order_id:o?.dbId||null,invoice_number:inv,client:o?.client||'',
     type:retType,amount:amt,date:retDate,
     notes:(retNotes?retNotes+' | ':'')+`أصناف: ${selectedItems}`,
@@ -2022,6 +2028,7 @@ async function saveReturn(){
   // 2. Auto-create expense with RETURN DATE
   if(amt>0){
     await sb.from('expenses').insert({
+      shop_id:currentShop?.id||1,
       date:retDate,cat_main:'مرتجعات',
       cat_sub:retType==='refund'?'رد فلوس':'إلغاء طلب',
       description:`مرتجع فاتورة #${inv} - ${o?.client||''} (${selectedItems})`,
@@ -2208,7 +2215,7 @@ async function saveEmp(empId){
     }else{
       if(!pwd){hideLoading();showToast('أدخل كلمة مرور','error');return;}
       const hashed=await hashPwd(pwd);
-      await sb.from('users').insert({name,username,password:hashed,role,job,base_salary:salary});
+      await sb.from('users').insert({shop_id:currentShop?.id||1,name,username,password:hashed,role,job,base_salary:salary});
       showToast('تم إضافة الموظف ✓','success');
     }
     await fetchAll();hideLoading();closeModal();renderEmployees();
@@ -3106,12 +3113,14 @@ async function saveEditDelivery(delId){
     if(newInsStatus==='collected'&&oldInsStatus!=='collected'){
       // Collected → income
       await sb.from('expenses').insert({
+        shop_id:currentShop?.id||1,
         date:today,cat_main:'تأمين',cat_sub:'استلام تأمين تسليم',
         description:`تأمين تسليم - ${d.client}`,amount:-newInsAmt,
       });
     }else if(newInsStatus==='returned'&&oldInsStatus!=='returned'){
       // Returned → expense
       await sb.from('expenses').insert({
+        shop_id:currentShop?.id||1,
         date:today,cat_main:'تأمين',cat_sub:'استرداد تأمين تسليم',
         description:`استرداد تأمين تسليم - ${d.client}`,amount:newInsAmt,
       });
@@ -3578,7 +3587,9 @@ async function initShop(){
 }
 
 async function switchShop(shopId){
-  currentShop=allShops.find(s=>s.id===parseInt(shopId));
+  const newShop=allShops.find(s=>s.id===parseInt(shopId));
+  if(!newShop)return;
+  currentShop=newShop;
   showLoading('تحميل '+currentShop.name+'...');
   await loadSettings();
   await fetchAll();
