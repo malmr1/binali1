@@ -1867,30 +1867,77 @@ function renderExpenses(){
       ${currentUser.role==='manager'?`<button class="btn-sm red" onclick="deleteExpense(${e.id})">حذف</button>`:''}
     </div></td>
   </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;padding:22px;color:var(--gr)">لا توجد مصروفات</td></tr>';
-}
-
+let _expRowsCount=1;
 function openExpModal(){
+  _expRowsCount=1;
   const cats=cfg.expCats||[];
   document.getElementById('MC').innerHTML=`
   <div class="overlay" onclick="if(event.target===this)closeModal()">
-    <div class="modal modal-sm">
-      <div class="m-hdr"><div class="m-ttl">+ إضافة مصروف</div><button class="m-close" onclick="closeModal()">×</button></div>
+    <div class="modal">
+      <div class="m-hdr"><div class="m-ttl">+ إضافة مصروف (متعدد)</div><button class="m-close" onclick="closeModal()">×</button></div>
       <div class="m-body">
-        <div class="fg"><label>التاريخ</label><input type="date" id="eDate" value="${new Date().toISOString().split('T')[0]}"></div>
-        <div class="fg"><label>البند الرئيسي</label>
-          <select id="eCatM" onchange="updateExpSubs()">${cats.map(c=>`<option>${c.name}</option>`).join('')}</select>
-        </div>
-        <div class="fg"><label>البند الفرعي</label><select id="eCatS"></select></div>
-        <div class="fg"><label>الوصف</label><input type="text" id="eDesc"></div>
-        <div class="fg"><label>المبلغ (ر.س)</label><input type="number" id="eAmt"></div>
+        <div class="a-info">يمكنك هنا إضافة أكثر من مصروف دفعة واحدة تحت نفس التاريخ لحفظ وقتك.</div>
+        <div class="fg"><label>التاريخ الموحد للمصروفات أدناه</label><input type="date" id="ebDate" value="${new Date().toISOString().split('T')[0]}"></div>
+        <div id="expRowsContainer"></div>
+        <button class="btn-sm" style="margin-top:10px" onclick="addBulkExpRow()">+ مصروف إضافي آخر</button>
       </div>
       <div class="m-foot">
         <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
-        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveExpense()">حفظ</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveBulkExpenses()">حفظ الكل</button>
       </div>
     </div>
   </div>`;
-  setTimeout(()=>updateExpSubs(),30);
+  renderBulkExpRows();
+}
+
+function renderBulkExpRows(){
+  const container=document.getElementById('expRowsContainer');
+  const cats=cfg.expCats||[];
+  let html='';
+  for(let i=0;i<_expRowsCount;i++){
+    html+=`
+    <div style="background:var(--d3);padding:12px;border-radius:2px;margin-bottom:10px;border:1px solid rgba(201,168,76,.2);position:relative">
+      ${_expRowsCount>1?`<button class="tag-del" style="position:absolute;top:10px;left:10px;font-size:16px" onclick="removeBulkExpRow(${i})">✕</button>`:''}
+      <div class="fgrid">
+        <div class="fg"><label>البند الرئيسي</label><select id="ebCatM_${i}" onchange="updateBulkExpSubs(${i})">${cats.map(c=>`<option>${c.name}</option>`).join('')}</select></div>
+        <div class="fg"><label>البند الفرعي</label><select id="ebCatS_${i}"></select></div>
+        <div class="fg"><label>الوصف</label><input type="text" id="ebDesc_${i}"></div>
+        <div class="fg"><label>المبلغ (ر.س)</label><input type="number" id="ebAmt_${i}"></div>
+      </div>
+    </div>`;
+  }
+  container.innerHTML=html;
+  for(let i=0;i<_expRowsCount;i++) updateBulkExpSubs(i);
+}
+
+function addBulkExpRow(){_expRowsCount++; renderBulkExpRows();}
+function removeBulkExpRow(idx){if(_expRowsCount<=1)return; _expRowsCount--; renderBulkExpRows();}
+
+function updateBulkExpSubs(i){
+  const m=document.getElementById('ebCatM_'+i)?.value;
+  const cat=(cfg.expCats||[]).find(c=>c.name===m);
+  const sel=document.getElementById('ebCatS_'+i);if(!sel)return;
+  sel.innerHTML=(cat?.subs||[]).map(s=>`<option>${s}</option>`).join('');
+}
+
+async function saveBulkExpenses(){
+  const date=document.getElementById('ebDate').value;
+  const exps=[];
+  for(let i=0;i<_expRowsCount;i++){
+    const catM=document.getElementById('ebCatM_'+i)?.value;
+    const catS=document.getElementById('ebCatS_'+i)?.value;
+    const desc=document.getElementById('ebDesc_'+i)?.value;
+    const amt=parseFloat(document.getElementById('ebAmt_'+i)?.value)||0;
+    if(amt>0){
+      exps.push({shop_id:currentShop?.id||1, date, cat_main:catM, cat_sub:catS, description:desc, amount:amt});
+    }
+  }
+  if(exps.length===0){showToast('أدخل مبلغاً لمصروف واحد على الأقل','error');return;}
+  showLoading('جاري الحفظ...');
+  const {error} = await sb.from('expenses').insert(exps);
+  if(error){hideLoading();showToast('خطأ: '+error.message,'error');return;}
+  await logAudit('إضافة مصروفات','expenses','',`${exps.length} مصروفات بإجمالي ${exps.reduce((s,e)=>s+e.amount,0)}`);
+  await fetchAll();hideLoading();closeModal();renderExpenses();showToast('تم إضافة المصروفات ✓','success');
 }
 
 function updateExpSubs(){
