@@ -322,8 +322,8 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
           <select class="fi" id="orderDraftF" onchange="renderOrders()"><option value="">الكل</option><option value="draft">مسودات فقط</option><option value="confirmed">مؤكدة فقط</option></select>
           </div>
           <div style="overflow-x:auto"><table><thead><tr>
-            <th>رقم المحل</th><th>رقم النظام</th><th>الموظف</th><th>العميل</th>
-            <th>المنتج</th><th>نوع الطلب</th><th>تاريخ الطلب</th><th>موعد الاستلام</th>
+            <th>رقم المحل</th><th>رقم النظام</th><th>الموظف</th><th>العميل</th><th>تاريخ الطلب</th>
+            <th>المنتج</th><th>نوع الطلب</th><th>موعد الاستلام</th>
             <th>المبلغ</th><th>المتبقي</th><th>الحالة</th><th>تأمين</th><th>إجراءات</th>
           </tr></thead><tbody id="ordersTbl"></tbody></table></div>
         </div>
@@ -342,7 +342,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
             <input type="date" class="fi" id="delTo" onchange="renderDeliveries()">
           </div>
           <div style="overflow-x:auto"><table><thead><tr>
-            <th>رقم الفاتورة (المحل)</th><th>اسم العميل</th><th>القيمة الأصلية</th><th>المبلغ المستلم</th><th>طريقة الدفع</th><th>التاريخ</th><th>بواسطة</th><th>تأمين</th><th>إجراءات</th>
+            <th>رقم الفاتورة (المحل)</th><th>اسم العميل</th><th>القيمة الأصلية</th><th>المبلغ المستلم</th><th>طريقة الدفع</th><th>التاريخ</th><th>بواسطة</th><th>تأمين</th><th>دفعات</th><th>إجراءات</th>
           </tr></thead><tbody id="delTbl"></tbody></table></div>
         </div>
       </div>
@@ -605,7 +605,7 @@ async function fetchAll(){
     id:x.invoice_number,dbId:x.id,localInvoice:x.local_invoice,
     employee:x.employee,client:x.client,phone:x.phone,
     dressType:x.dress_type,orderType:x.order_type,
-    orderDate:x.order_date,deliveryDate:x.delivery_date,
+    orderDate:x.order_date,orderDateH:x.order_date?toHijri(x.order_date):'',deliveryDate:x.delivery_date,
     amount:x.amount||0,deposit:x.deposit||0,payMethod:x.pay_method,
     partials:x.partial_payments||[],
     insurance:x.insurance||0,insuranceReturned:x.insurance_returned,insuranceReturnDate:x.insurance_return_date,
@@ -937,7 +937,6 @@ function renderDashboard(){
       <td><strong style="color:var(--gold);cursor:pointer" onclick="showQR(${o.id})">#${o.id}</strong></td>
       <td><div style="font-weight:600">${o.client}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
       <td>${o.dressType}</td>
-      <td>${o.orderDate||'-'}<div style="font-size:9px;color:var(--gr)">${toHijri(o.orderDate)}</div></td>
       <td>${o.deliveryDate}<div style="font-size:9px;color:var(--gr)">${toHijri(o.deliveryDate)}</div></td>
       <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
       ${showAmountsD?`<td>${calcFinal(o).toLocaleString()} ر.س</td>`:''}
@@ -960,7 +959,7 @@ function renderOrders(){
   const draftF=document.getElementById('orderDraftF')?.value||'';
   const canAdd=currentUser.role==='manager'||currentUser.role==='staff'||canDo('canAddOrder');
   document.getElementById('btnAddOrder').style.display=canAdd?'inline-flex':'none';
-  let list=db.orders.filter(o=>{
+  let list=[...db.orders].sort((a,b)=>new Date(b.orderDate||0)-new Date(a.orderDate||0)).filter(o=>{
     let ms=false;
     if(!search){ms=true;}
     else if(search.startsWith('#')){
@@ -981,13 +980,7 @@ function renderOrders(){
     const draftMatch=!draftF||(draftF==='draft'&&o.isDraft)||(draftF==='confirmed'&&!o.isDraft);
     return ms&&(!stF||o.status===stF)&&(!tyF||o.orderType===tyF)&&draftMatch;
   });
- // ترتيب الطلبات (أحدث تاريخ أولاً، ثم حسب رقم النظام)
-  list.sort((a,b) => {
-    const d1 = new Date(a.orderDate||0).getTime();
-    const d2 = new Date(b.orderDate||0).getTime();
-    if(d1 !== d2) return d2 - d1;
-    return b.id - a.id;
-  });=currentUser.role==='manager';
+  const canDel=currentUser.role==='manager';
   document.getElementById('ordersTbl').innerHTML=list.map(o=>{
     const disc=calcDisc(o);const h=(o.tracking||[]).slice(-1)[0];const rem=calcRem(o);
     return`<tr ${o.returned?'style="opacity:.55"':''}>
@@ -1761,7 +1754,10 @@ function renderSalaries(){
     <td style="color:var(--gr)">${s.notes||'-'}</td>
     <td>${s.date||''}</td>
     <td style="color:var(--gr);font-size:10px">${s.createdBy||''}</td>
-    <td>${(currentUser.role==='manager'||canDo('canEditSalaries'))?`<button class="btn-sm blue" onclick="openEditSalary(${s.id})">تعديل</button>`:''}</td>
+    <td><div style="display:flex;gap:4px">
+      ${(currentUser.role==='manager'||canDo('canEditSalaries'))?`<button class="btn-sm blue" onclick="openEditSalary(${s.id})">تعديل</button>`:''}
+      ${currentUser.role==='manager'?`<button class="btn-sm red" onclick="deleteSalary(${s.id})">حذف</button>`:''}
+    </div></td>
   </tr>`).join('')||'<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--gr)">لا توجد سجلات</td></tr>';
 }
 
@@ -1867,77 +1863,30 @@ function renderExpenses(){
       ${currentUser.role==='manager'?`<button class="btn-sm red" onclick="deleteExpense(${e.id})">حذف</button>`:''}
     </div></td>
   </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;padding:22px;color:var(--gr)">لا توجد مصروفات</td></tr>';
-let _expRowsCount=1;
+}
+
 function openExpModal(){
-  _expRowsCount=1;
   const cats=cfg.expCats||[];
   document.getElementById('MC').innerHTML=`
   <div class="overlay" onclick="if(event.target===this)closeModal()">
-    <div class="modal">
-      <div class="m-hdr"><div class="m-ttl">+ إضافة مصروف (متعدد)</div><button class="m-close" onclick="closeModal()">×</button></div>
+    <div class="modal modal-sm">
+      <div class="m-hdr"><div class="m-ttl">+ إضافة مصروف</div><button class="m-close" onclick="closeModal()">×</button></div>
       <div class="m-body">
-        <div class="a-info">يمكنك هنا إضافة أكثر من مصروف دفعة واحدة تحت نفس التاريخ لحفظ وقتك.</div>
-        <div class="fg"><label>التاريخ الموحد للمصروفات أدناه</label><input type="date" id="ebDate" value="${new Date().toISOString().split('T')[0]}"></div>
-        <div id="expRowsContainer"></div>
-        <button class="btn-sm" style="margin-top:10px" onclick="addBulkExpRow()">+ مصروف إضافي آخر</button>
+        <div class="fg"><label>التاريخ</label><input type="date" id="eDate" value="${new Date().toISOString().split('T')[0]}"></div>
+        <div class="fg"><label>البند الرئيسي</label>
+          <select id="eCatM" onchange="updateExpSubs()">${cats.map(c=>`<option>${c.name}</option>`).join('')}</select>
+        </div>
+        <div class="fg"><label>البند الفرعي</label><select id="eCatS"></select></div>
+        <div class="fg"><label>الوصف</label><input type="text" id="eDesc"></div>
+        <div class="fg"><label>المبلغ (ر.س)</label><input type="number" id="eAmt"></div>
       </div>
       <div class="m-foot">
         <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
-        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveBulkExpenses()">حفظ الكل</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveExpense()">حفظ</button>
       </div>
     </div>
   </div>`;
-  renderBulkExpRows();
-}
-
-function renderBulkExpRows(){
-  const container=document.getElementById('expRowsContainer');
-  const cats=cfg.expCats||[];
-  let html='';
-  for(let i=0;i<_expRowsCount;i++){
-    html+=`
-    <div style="background:var(--d3);padding:12px;border-radius:2px;margin-bottom:10px;border:1px solid rgba(201,168,76,.2);position:relative">
-      ${_expRowsCount>1?`<button class="tag-del" style="position:absolute;top:10px;left:10px;font-size:16px" onclick="removeBulkExpRow(${i})">✕</button>`:''}
-      <div class="fgrid">
-        <div class="fg"><label>البند الرئيسي</label><select id="ebCatM_${i}" onchange="updateBulkExpSubs(${i})">${cats.map(c=>`<option>${c.name}</option>`).join('')}</select></div>
-        <div class="fg"><label>البند الفرعي</label><select id="ebCatS_${i}"></select></div>
-        <div class="fg"><label>الوصف</label><input type="text" id="ebDesc_${i}"></div>
-        <div class="fg"><label>المبلغ (ر.س)</label><input type="number" id="ebAmt_${i}"></div>
-      </div>
-    </div>`;
-  }
-  container.innerHTML=html;
-  for(let i=0;i<_expRowsCount;i++) updateBulkExpSubs(i);
-}
-
-function addBulkExpRow(){_expRowsCount++; renderBulkExpRows();}
-function removeBulkExpRow(idx){if(_expRowsCount<=1)return; _expRowsCount--; renderBulkExpRows();}
-
-function updateBulkExpSubs(i){
-  const m=document.getElementById('ebCatM_'+i)?.value;
-  const cat=(cfg.expCats||[]).find(c=>c.name===m);
-  const sel=document.getElementById('ebCatS_'+i);if(!sel)return;
-  sel.innerHTML=(cat?.subs||[]).map(s=>`<option>${s}</option>`).join('');
-}
-
-async function saveBulkExpenses(){
-  const date=document.getElementById('ebDate').value;
-  const exps=[];
-  for(let i=0;i<_expRowsCount;i++){
-    const catM=document.getElementById('ebCatM_'+i)?.value;
-    const catS=document.getElementById('ebCatS_'+i)?.value;
-    const desc=document.getElementById('ebDesc_'+i)?.value;
-    const amt=parseFloat(document.getElementById('ebAmt_'+i)?.value)||0;
-    if(amt>0){
-      exps.push({shop_id:currentShop?.id||1, date, cat_main:catM, cat_sub:catS, description:desc, amount:amt});
-    }
-  }
-  if(exps.length===0){showToast('أدخل مبلغاً لمصروف واحد على الأقل','error');return;}
-  showLoading('جاري الحفظ...');
-  const {error} = await sb.from('expenses').insert(exps);
-  if(error){hideLoading();showToast('خطأ: '+error.message,'error');return;}
-  await logAudit('إضافة مصروفات','expenses','',`${exps.length} مصروفات بإجمالي ${exps.reduce((s,e)=>s+e.amount,0)}`);
-  await fetchAll();hideLoading();closeModal();renderExpenses();showToast('تم إضافة المصروفات ✓','success');
+  setTimeout(()=>updateExpSubs(),30);
 }
 
 function updateExpSubs(){
@@ -2593,6 +2542,7 @@ function renderDeliveries(){
       <td style="color:var(--gr);font-size:10px">${d.createdBy||''}</td>
       <td>${d.insuranceAmount>0?`<span class="badge ${d.insuranceStatus==='returned'?'b-green':d.insuranceStatus==='collected'?'b-blue':'b-orange'}">${d.insuranceAmount.toLocaleString()} ر.س</span>`:'<span style="color:var(--gr)">-</span>'}</td>
       <td><div style="display:flex;gap:4px">
+        <button class="btn-sm blue" onclick="openDeliveryActions(${d.id})">إجراءات</button>
         <button class="btn-sm green" onclick="printDeliveryInvoice(${d.id})">فاتورة</button>
         ${canEdit?`<button class="btn-sm blue" onclick="openEditDelivery(${d.id})">تعديل</button>`:''}
         ${(currentUser.role==='manager'||canDo('canEditDeliveryRecord'))?`<button class="btn-sm red" onclick="deleteDelivery(${d.id})">حذف</button>`:''}
@@ -3660,6 +3610,167 @@ async function switchShop(shopId){
     switchPage('dashboard');
   }
   showToast('تم التبديل إلى '+currentShop.name,'success');
+}
+
+
+// ===== DELETE SALARY =====
+async function deleteSalary(id){
+  if(!confirm('حذف هذا السجل؟ سيُحذف من المصروفات أيضاً'))return;
+  const s=db.salaries.find(x=>x.id===id);if(!s)return;
+  showLoading('...');
+  // Delete from salaries
+  await sb.from('salaries').delete().eq('id',id);
+  // Delete related expense (same amount, same date, same description)
+  await sb.from('expenses').delete()
+    .eq('cat_main',s.type==='salary'?'رواتب':'سحبيات')
+    .eq('amount',s.amount)
+    .eq('date',s.date)
+    .eq('shop_id',currentShop?.id||1);
+  await logAudit('حذف راتب','salaries',id,`${s.empName} - ${s.amount} ر.س`);
+  await fetchAll();hideLoading();renderSalaries();
+  showToast('تم الحذف ✓','error');
+}
+
+// ===== MULTI-EXPENSE =====
+function addExpItemRow(){
+  const cats=cfg.expCats||[];
+  const catOpts=cats.map(c=>`<option>${c.name}</option>`).join('');
+  const row=document.createElement('div');
+  row.className='exp-item-row';
+  row.style.cssText='background:var(--d3);padding:10px;border-radius:2px;margin-bottom:8px;border:1px solid rgba(201,168,76,.1);position:relative';
+  row.innerHTML=`
+    <button type="button" onclick="this.parentElement.remove();calcExpMultiTotal()" style="position:absolute;top:6px;left:6px;background:none;border:none;color:var(--red);cursor:pointer;font-size:16px">✕</button>
+    <div class="fgrid" style="margin-top:8px">
+      <div class="fg"><label>البند الرئيسي</label><select class="exp-catm" onchange="updateExpSubsRow(this)">${catOpts}</select></div>
+      <div class="fg"><label>البند الفرعي</label><select class="exp-cats"></select></div>
+      <div class="fg"><label>الوصف</label><input type="text" class="exp-desc" placeholder="وصف اختياري"></div>
+      <div class="fg"><label>المبلغ (ر.س)</label><input type="number" class="exp-amt" placeholder="0" oninput="calcExpMultiTotal()"></div>
+    </div>`;
+  document.getElementById('expItemsList').appendChild(row);
+  updateExpSubsRow(row.querySelector('.exp-catm'));
+}
+
+function updateExpSubsRow(sel){
+  const m=sel.value;
+  const cat=(cfg.expCats||[]).find(c=>c.name===m);
+  const subSel=sel.closest('.exp-item-row').querySelector('.exp-cats');
+  if(subSel)subSel.innerHTML=(cat?.subs||[]).map(s=>`<option>${s}</option>`).join('');
+}
+
+function calcExpMultiTotal(){
+  const rows=document.querySelectorAll('.exp-item-row .exp-amt');
+  let total=0;
+  rows.forEach(r=>total+=parseFloat(r.value)||0);
+  const el=document.getElementById('expMultiTotal');
+  if(el)el.textContent=total>0?'الإجمالي: '+total.toLocaleString()+' ر.س':'';
+}
+
+async function saveMultiExpense(){
+  const date=document.getElementById('eDate').value;
+  if(!date){showToast('اختر التاريخ','error');return;}
+  const rows=document.querySelectorAll('.exp-item-row');
+  const items=[];
+  rows.forEach(row=>{
+    const amt=parseFloat(row.querySelector('.exp-amt')?.value)||0;
+    const catM=row.querySelector('.exp-catm')?.value||'';
+    const catS=row.querySelector('.exp-cats')?.value||'';
+    const desc=row.querySelector('.exp-desc')?.value||'';
+    if(amt>0)items.push({cat_main:catM,cat_sub:catS,description:desc,amount:amt,date,created_by:currentUser.name,shop_id:currentShop?.id||1});
+  });
+  if(!items.length){showToast('أضف بنداً واحداً على الأقل','error');return;}
+  showLoading('جاري الحفظ...');
+  await sb.from('expenses').insert(items);
+  await logAudit('إضافة مصروفات','expenses',0,`${items.length} بند - ${date}`);
+  await fetchAll();hideLoading();closeModal();renderExpenses();
+  showToast(`✅ تم حفظ ${items.length} بند`,'success');
+}
+
+// ===== DELIVERY ACTIONS =====
+function openDeliveryActions(delId){
+  const d=db.deliveries.find(x=>x.id===delId);if(!d)return;
+  const pays=(cfg.payMethods||[]).map(t=>`<option>${t}</option>`).join('');
+  document.getElementById('MC').innerHTML=`
+  <div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal modal-sm">
+      <div class="m-hdr"><div class="m-ttl">إجراءات التسليم - ${d.client}</div><button class="m-close" onclick="closeModal()">×</button></div>
+      <div class="m-body">
+        <div style="font-size:11px;color:var(--gr);margin-bottom:13px">المبلغ الأصلي: ${(d.originalAmount||0).toLocaleString()} ر.س · المستلم: ${(d.receivedAmount||0).toLocaleString()} ر.س</div>
+        <div class="fg"><label>نوع الإجراء</label>
+          <select id="daType" onchange="toggleDeliveryActionType(this.value)">
+            <option value="payment">دفعة إضافية</option>
+            <option value="deposit">عربون</option>
+            <option value="discount">خصم</option>
+          </select>
+        </div>
+        <div id="daPaySection">
+          <div class="fg"><label>طريقة الدفع</label>
+            <select id="daPayMeth" onchange="toggleDaSplit(this.value)">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
+          </div>
+          <div class="fg"><label>المبلغ (ر.س)</label><input type="number" id="daAmt" placeholder="0" oninput="calcDaSplit()"></div>
+          <div id="daSplitRow" style="display:none">
+            <div class="fgrid">
+              <div class="fg"><label>نقدي</label><input type="number" id="daCash" placeholder="0" oninput="calcDaSplit()"></div>
+              <div class="fg"><label>شبكة</label><input type="number" id="daCard" placeholder="0" oninput="calcDaSplit()"></div>
+            </div>
+          </div>
+        </div>
+        <div id="daDiscSection" style="display:none">
+          <div class="fg"><label>نوع الخصم</label>
+            <select id="daDiscType"><option value="amount">مبلغ ثابت</option><option value="percent">نسبة %</option></select>
+          </div>
+          <div class="fg"><label>قيمة الخصم</label><input type="number" id="daDiscVal" placeholder="0"></div>
+        </div>
+        <div class="fg"><label>التاريخ</label><input type="date" id="daDate" value="${new Date().toISOString().split('T')[0]}"></div>
+      </div>
+      <div class="m-foot">
+        <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveDeliveryAction(${delId})">حفظ</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleDeliveryActionType(val){
+  document.getElementById('daPaySection').style.display=val==='discount'?'none':'block';
+  document.getElementById('daDiscSection').style.display=val==='discount'?'block':'none';
+}
+function toggleDaSplit(val){
+  document.getElementById('daSplitRow').style.display=val==='__split__'?'block':'none';
+}
+function calcDaSplit(){
+  const cash=parseFloat(document.getElementById('daCash')?.value)||0;
+  const card=parseFloat(document.getElementById('daCard')?.value)||0;
+  if(cash||card){const amtEl=document.getElementById('daAmt');if(amtEl)amtEl.value=cash+card;}
+}
+
+async function saveDeliveryAction(delId){
+  const d=db.deliveries.find(x=>x.id===delId);if(!d)return;
+  const type=document.getElementById('daType').value;
+  const date=document.getElementById('daDate').value;
+  showLoading('...');
+  if(type==='discount'){
+    const discType=document.getElementById('daDiscType').value;
+    const discVal=parseFloat(document.getElementById('daDiscVal').value)||0;
+    const discAmt=discType==='percent'?Math.round((d.originalAmount||0)*discVal/100):discVal;
+    await sb.from('deliveries').update({
+      discount_type:discType,discount_value:discVal,
+      received_amount:Math.max(0,(d.receivedAmount||0)-discAmt),
+    }).eq('id',delId);
+    showToast('تم تطبيق الخصم ✓','success');
+  }else{
+    const meth=document.getElementById('daPayMeth').value;
+    const amt=parseFloat(document.getElementById('daAmt').value)||0;
+    const cash=parseFloat(document.getElementById('daCash')?.value)||0;
+    const card=parseFloat(document.getElementById('daCard')?.value)||0;
+    const finalAmt=meth==='__split__'?cash+card:amt;
+    const partials=[...(d.partials||[]),{amount:finalAmt,method:meth==='__split__'?'مختلط':meth,cash:meth==='__split__'?cash:0,card:meth==='__split__'?card:0,date,type}];
+    await sb.from('deliveries').update({
+      received_amount:(d.receivedAmount||0)+finalAmt,
+      partials,
+    }).eq('id',delId);
+    showToast('تمت الإضافة ✓','success');
+  }
+  await fetchAll();hideLoading();closeModal();renderDeliveries();
 }
 
 // ===== EXPORT EXCEL =====
