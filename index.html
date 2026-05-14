@@ -324,7 +324,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
           <div style="overflow-x:auto"><table><thead><tr>
             <th>رقم المحل</th><th>رقم النظام</th><th>الموظف</th><th>العميل</th>
             <th>المنتج</th><th>نوع الطلب</th><th>تاريخ الطلب</th><th>موعد الاستلام</th>
-            ${(currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts'))?'<th>المبلغ</th><th>المتبقي</th><th>تأمين</th>':''}
+            <th id="thAmounts" style="display:none">المبلغ</th><th id="thRem" style="display:none">المتبقي</th><th id="thIns" style="display:none">تأمين</th>
             <th>الحالة</th><th>إجراءات</th>
           </tr></thead><tbody id="ordersTbl"></tbody></table></div>
         </div>
@@ -454,7 +454,15 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       </div>
       <div class="sec-hdr"><div class="sec-ttl">💸 تحليل المصروفات</div></div>
       <div id="expBreakdown" style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:14px"></div>
-      <div class="tw" style="margin-bottom:18px"><table><thead><tr><th>البند</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="expDetailTbl"></tbody></table></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <select class="fi" id="expCatFilter" onchange="renderReports()" style="min-width:150px">
+          <option value="">كل البنود الرئيسية</option>
+        </select>
+        <select class="fi" id="expSubFilter" onchange="renderReports()" style="min-width:150px">
+          <option value="">كل البنود الفرعية</option>
+        </select>
+      </div>
+      <div class="tw" style="margin-bottom:18px"><table><thead><tr><th>البند الرئيسي</th><th>البند الفرعي</th><th>الوصف</th><th>المبلغ</th><th>التاريخ</th></tr></thead><tbody id="expDetailTbl"></tbody></table></div>
       <div class="sec-hdr"><div class="sec-ttl">تقرير الموظفين</div></div>
       <div class="tw"><table><thead><tr><th>الموظف</th><th>عدد الطلبات</th><th>إجمالي المبيعات</th><th>المحصّل</th><th>المتبقي</th></tr></thead><tbody id="empRepTbl"></tbody></table></div>
       <div class="sec-hdr" style="margin-top:15px"><div class="sec-ttl">التحليل الشهري</div></div>
@@ -545,7 +553,7 @@ const DEF={
   ],
   products:['عروسة','ملكة','سهرة','بشت','أخرى'],
   orderTypes:['تفصيل ملك','تفصيل ايجار','جاهز ملك','جاهز ايجار'],
-  payMethods:['نقدي','شبكة','تحويل','جزئي-نقدي','جزئي-شبكة','جزئي-تحويل'],
+  payMethods:['نقدي','شبكة','تحويل','مختلط (نقدي+شبكة)'],
   trackingSteps:[
     {name:'استلام الطلب',subs:[]},
     {name:'عند الخياط',subs:['خياط 1','خياط 2']},
@@ -556,6 +564,12 @@ const DEF={
   customRoles:[],
   discountEnabled:true,
 };
+
+// طرق الدفع الثابتة - لا تُحذف ولا تُعدَّل
+const FIXED_PAY=['نقدي','شبكة','تحويل','مختلط (نقدي+شبكة)'];
+function getPayOpts(selected=''){
+  return FIXED_PAY.map(p=>`<option value="${p}" ${selected===p?'selected':''}>${p}</option>`).join('');
+}
 
 // ===== LOADING =====
 function showLoading(m='جاري التحميل...'){const o=document.getElementById('loadOv');o.style.display='flex';document.getElementById('loadMsg').textContent=m;}
@@ -583,7 +597,11 @@ async function loadSettings(){
 }
 async function saveSetting(key,value){
   const sid=currentShop?.id||1;
-  await sb.from('settings').upsert({key,value,shop_id:sid,updated_at:new Date().toISOString()},{onConflict:'key,shop_id',ignoreDuplicates:false});
+  try{
+    const{error:delErr}=await sb.from('settings').delete().eq('key',key).eq('shop_id',sid);
+    const{error:insErr}=await sb.from('settings').insert({key,value,shop_id:sid,updated_at:new Date().toISOString()});
+    if(insErr)throw insErr;
+  }catch(e){console.error('saveSetting error:',e);}
   cfg[key]=value;
 }
 
@@ -954,6 +972,12 @@ function renderDashboard(){
 
 // ===== ORDERS =====
 function renderOrders(){
+  // إظهار/إخفاء أعمدة المبالغ حسب الصلاحية
+  const canAmt=currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts');
+  ['thAmounts','thRem','thIns'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.style.display=canAmt?'':'none';
+  });
   const search=(document.getElementById('orderSearch')?.value||'').toLowerCase().replace('#','');
   const stF=document.getElementById('orderStatusF')?.value||'';
   const tyF=document.getElementById('orderTypeF')?.value||'';
@@ -2165,14 +2189,49 @@ function renderReports(){
   const ost=document.getElementById('orderStatusTbl');if(ost)ost.innerHTML=Object.entries(statusMap).map(([k,v])=>`<tr><td>${k}</td><td style="color:var(--blue)">${v}</td></tr>`).join('');
   const prodMap={};fOrders.forEach(o=>{const items=o.extraItems&&o.extraItems.length>0?o.extraItems:[{name:o.dressType||'غير محدد',price:calcFinal(o)}];items.forEach(it=>{const n=it.name||'غير محدد';if(!prodMap[n])prodMap[n]={count:0,total:0};prodMap[n].count++;prodMap[n].total+=(it.price||0);});});
   const pt=document.getElementById('productsTbl');if(pt)pt.innerHTML=Object.entries(prodMap).map(([k,v])=>`<tr><td>${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--gold)">${v.total.toLocaleString()} ر.س</td></tr>`).join('');
-  const expMap={};fExp.filter(e=>(e.amount||0)>0).forEach(e=>{const c=e.catMain||'غير محدد';if(!expMap[c])expMap[c]={count:0,total:0};expMap[c].count++;expMap[c].total+=(e.amount||0);});
+  // ===== فلاتر وتفاصيل المصروفات =====
+  const expCatSel=document.getElementById('expCatFilter');
+  const expSubSel=document.getElementById('expSubFilter');
+  const selCat=expCatSel?.value||'';
+  const selSub=expSubSel?.value||'';
+  const allPosExp=fExp.filter(e=>(e.amount||0)>0);
+  // ملء قوائم الفلاتر
+  if(expCatSel){
+    const cats=[...new Set(allPosExp.map(e=>e.catMain||'غير محدد'))].sort();
+    const prev=expCatSel.value;
+    expCatSel.innerHTML='<option value="">كل البنود الرئيسية</option>'+cats.map(c=>`<option value="${c}" ${c===prev?'selected':''}>${c}</option>`).join('');
+    if(expSubSel){
+      const subs=[...new Set(allPosExp.filter(e=>!prev||(e.catMain||'غير محدد')===prev).map(e=>e.catSub||''))].filter(Boolean).sort();
+      const prevS=expSubSel.value;
+      expSubSel.innerHTML='<option value="">كل البنود الفرعية</option>'+subs.map(s=>`<option value="${s}" ${s===prevS?'selected':''}>${s}</option>`).join('');
+    }
+  }
+  const filtExp=allPosExp.filter(e=>(!selCat||(e.catMain||'غير محدد')===selCat)&&(!selSub||(e.catSub||'')===selSub));
+  // ملخص حسب البند الرئيسي (للبطاقات)
+  const expMap={};allPosExp.forEach(e=>{const c=e.catMain||'غير محدد';if(!expMap[c])expMap[c]={count:0,total:0};expMap[c].count++;expMap[c].total+=(e.amount||0);});
   const fSals=db.salaries.filter(s=>{const d=new Date(s.date);return d>=from&&d<=to;});
   const salTotal=fSals.filter(s=>s.type==='salary').reduce((sum,s)=>sum+(s.amount||0),0);
   const withTotal=fSals.filter(s=>s.type==='withdrawal').reduce((sum,s)=>sum+(s.amount||0),0);
   if(salTotal>0){if(!expMap['رواتب'])expMap['رواتب']={count:0,total:0};expMap['رواتب'].count+=fSals.filter(s=>s.type==='salary').length;expMap['رواتب'].total+=salTotal;}
   if(withTotal>0){if(!expMap['سحبيات'])expMap['سحبيات']={count:0,total:0};expMap['سحبيات'].count+=fSals.filter(s=>s.type==='withdrawal').length;expMap['سحبيات'].total+=withTotal;}
-  const eb=document.getElementById('expBreakdown');if(eb)eb.innerHTML=Object.entries(expMap).map(([k,v])=>`<div class="stat-card sc-red"><div class="s-lbl">${k}</div><div class="s-val" style="font-size:16px">${v.total.toLocaleString()}<small style="font-size:10px"> ر.س</small></div><div class="s-sub">${v.count} عملية</div></div>`).join('');
-  const edt=document.getElementById('expDetailTbl');if(edt)edt.innerHTML=Object.entries(expMap).map(([k,v])=>`<tr><td style="font-weight:700">${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--red)">${v.total.toLocaleString()} ر.س</td></tr>`).join('');
+  const eb=document.getElementById('expBreakdown');if(eb)eb.innerHTML=Object.entries(expMap).map(([k,v])=>`<div class="stat-card sc-red" style="cursor:pointer" onclick="if(document.getElementById('expCatFilter'))document.getElementById('expCatFilter').value=this.querySelector('.s-lbl').textContent;renderReports()"><div class="s-lbl">${k}</div><div class="s-val" style="font-size:16px">${v.total.toLocaleString()}<small style="font-size:10px"> ر.س</small></div><div class="s-sub">${v.count} عملية</div></div>`).join('');
+  // جدول التفاصيل مع الفلتر
+  const edt=document.getElementById('expDetailTbl');
+  if(edt){
+    if(filtExp.length===0&&!selCat&&!selSub){
+      // عرض ملخص بدون فلتر
+      edt.innerHTML=Object.entries(expMap).map(([k,v])=>`<tr><td style="font-weight:700;color:var(--gold)">${k}</td><td colspan="2" style="color:var(--gr)">-</td><td style="color:var(--red);font-weight:700">${v.total.toLocaleString()} ر.س</td><td style="color:var(--gr)">${v.count} عملية</td></tr>`).join('');
+    }else{
+      // عرض تفاصيل مفلترة
+      edt.innerHTML=filtExp.map(e=>`<tr>
+        <td><span class="badge b-gold">${e.catMain||'-'}</span></td>
+        <td style="color:var(--gr)">${e.catSub||'-'}</td>
+        <td style="font-size:11px">${e.description||'-'}</td>
+        <td style="color:var(--red);font-weight:700">${(e.amount||0).toLocaleString()} ر.س</td>
+        <td style="color:var(--gr);font-size:11px">${e.date||'-'}</td>
+      </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--gr)">لا توجد نتائج</td></tr>';
+    }
+  }
   const empData={};fOrders.forEach(o=>{const e=o.employee||'غير محدد';if(!empData[e])empData[e]={count:0,sales:0,collected:0,remaining:0};empData[e].count++;empData[e].sales+=calcFinal(o);empData[e].collected+=calcPaid(o);empData[e].remaining+=Math.max(0,calcRem(o));});
   const ert=document.getElementById('empRepTbl');if(ert)ert.innerHTML=Object.entries(empData).map(([e,d])=>`<tr><td style="font-weight:700">${e}</td><td style="color:var(--blue)">${d.count}</td><td style="color:var(--gold)">${d.sales.toLocaleString()} ر.س</td><td style="color:var(--green)">${d.collected.toLocaleString()} ر.س</td><td style="color:${d.remaining>0?'var(--red)':' var(--green)'}">${d.remaining.toLocaleString()} ر.س</td></tr>`).join('');
   const months=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
@@ -2591,7 +2650,6 @@ function renderDeliveries(){
 }
 
 function openDeliveryModal(){
-  const pays=(cfg.payMethods||[]).map(t=>`<option>${t}</option>`).join('');
   document.getElementById('MC').innerHTML=`
   <div class="overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal modal-sm">
@@ -2599,10 +2657,28 @@ function openDeliveryModal(){
       <div class="m-body">
         <div class="fg"><label>اسم العميل</label><input type="text" id="dClient"></div>
         <div class="fg"><label>رقم الفاتورة في المحل (اختياري)</label><input type="text" id="dInv"></div>
-        <div class="fg"><label>القيمة الأصلية (ر.س)</label><input type="number" id="dOrig"></div>
-        <div class="fg"><label>المبلغ المستلم (ر.س)</label><input type="number" id="dAmt"></div>
-        <div class="fg"><label>طريقة الدفع</label><select id="dPay">${pays}</select></div>
         <div class="fg"><label>التاريخ</label><input type="date" id="dDate" value="${new Date().toISOString().split('T')[0]}"></div>
+        <div class="fg"><label>القيمة الأصلية (ر.س)</label><input type="number" id="dOrig" oninput="calcDelNet()"></div>
+        <div class="fgrid">
+          <div class="fg"><label>نوع الخصم</label>
+            <select id="dDiscType" onchange="calcDelNet()">
+              <option value="none">بدون خصم</option>
+              <option value="amount">مبلغ ثابت</option>
+              <option value="percent">نسبة %</option>
+            </select>
+          </div>
+          <div class="fg"><label>قيمة الخصم</label><input type="number" id="dDiscVal" value="0" placeholder="0" oninput="calcDelNet()"></div>
+        </div>
+        <div id="dNetRow" style="display:none;background:var(--d3);padding:8px 10px;border-radius:2px;margin-bottom:10px;font-size:12px">
+          صافي بعد الخصم: <strong id="dNetAmt" style="color:var(--gold)">-</strong>
+        </div>
+        <div class="fg"><label>المبلغ المستلم (ر.س)</label><input type="number" id="dAmt"></div>
+        <div class="fg"><label>طريقة الدفع</label>
+          <select id="dPay" onchange="toggleDelTransfer(this.value)">${getPayOpts()}</select>
+        </div>
+        <div id="dTransferNote" style="display:none">
+          <div class="fg"><label>📋 ملاحظة التحويل (اسم المحوَّل إليه)</label><input type="text" id="dTransferTo" placeholder="مثال: محمد / حساب الشركة"></div>
+        </div>
         <div style="border-top:1px solid rgba(201,168,76,.1);padding-top:12px;margin-top:4px">
           <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:9px">🛡️ التأمين (اختياري)</div>
           <div class="fgrid">
@@ -2625,27 +2701,69 @@ function openDeliveryModal(){
   </div>`;
 }
 
+function calcDelNet(){
+  const orig=parseFloat(document.getElementById('dOrig')?.value)||0;
+  const discType=document.getElementById('dDiscType')?.value||'none';
+  const discVal=parseFloat(document.getElementById('dDiscVal')?.value)||0;
+  let disc=0;
+  if(discType==='amount')disc=discVal;
+  else if(discType==='percent')disc=Math.round(orig*discVal/100);
+  const net=Math.max(0,orig-disc);
+  const netRow=document.getElementById('dNetRow');
+  const netAmt=document.getElementById('dNetAmt');
+  if(netRow&&netAmt){
+    netRow.style.display=discType!=='none'?'block':'none';
+    netAmt.textContent=net.toLocaleString()+' ر.س';
+  }
+}
+function toggleDelTransfer(val){
+  const el=document.getElementById('dTransferNote');
+  if(el)el.style.display=val==='تحويل'?'block':'none';
+}
+
 async function saveDelivery2(){
   const client=document.getElementById('dClient').value.trim();
   if(!client){showToast('أدخل اسم العميل','error');return;}
+  const orig=parseFloat(document.getElementById('dOrig').value)||0;
   const amt=parseFloat(document.getElementById('dAmt').value)||0;
   const date=document.getElementById('dDate').value;
+  const payM=document.getElementById('dPay').value;
+  const transferTo=document.getElementById('dTransferTo')?.value||'';
+  const discType=document.getElementById('dDiscType').value;
+  const discVal=parseFloat(document.getElementById('dDiscVal').value)||0;
+  let discAmt=0;
+  if(discType==='amount')discAmt=discVal;
+  else if(discType==='percent')discAmt=Math.round(orig*discVal/100);
+  const payNote=payM==='تحويل'&&transferTo?` (${transferTo})`:'';
   showLoading('جاري الحفظ...');
   const insAmt=parseFloat(document.getElementById('dIns').value)||0;
   const insStatus=document.getElementById('dInsStatus').value;
   await sb.from('deliveries').insert({
     local_invoice:document.getElementById('dInv').value||null,
     client,
-    original_amount:parseFloat(document.getElementById('dOrig').value)||0,
+    original_amount:orig,
     received_amount:amt,
-    pay_method:document.getElementById('dPay').value,
+    pay_method:payM+(payNote),
     date,
     created_by:currentUser.name,
     insurance_amount:insAmt,
     insurance_status:insStatus,
+    discount_type:discType,
+    discount_value:discVal,
     shop_id:currentShop?.id||1,
   });
-  await logAudit('تسليم جديد','',`${client} - ${amt.toLocaleString()} ر.س`);
+  // حفظ الخصم كمصروف تلقائياً
+  if(discAmt>0){
+    await sb.from('expenses').insert({
+      shop_id:currentShop?.id||1,
+      date,
+      cat_main:'خصومات',
+      cat_sub:'خصم تسليم',
+      description:`خصم تسليم - ${client}`,
+      amount:discAmt,
+    });
+  }
+  await logAudit('تسليم جديد','deliveries','',`${client} - ${amt.toLocaleString()} ر.س`);
   await fetchAll();hideLoading();closeModal();renderDeliveries();
   showToast('تم تسجيل التسليم ✓','success');
 }
@@ -3825,7 +3943,7 @@ function exportExcel(){
   const csv=rows.map(r=>r.join(',')).join('\n');
   const BOM='\uFEFF';
   const blob=new Blob([BOM+csv],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`بن-علي-طلبات-${new Date().toISOString().split('T')[0]}.csv`;a.click();
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${currentShop?.name||'نظام'}-طلبات-${new Date().toISOString().split('T')[0]}.csv`;a.click();
 }
 
 </script>
