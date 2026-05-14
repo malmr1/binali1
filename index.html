@@ -322,9 +322,10 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
           <select class="fi" id="orderDraftF" onchange="renderOrders()"><option value="">الكل</option><option value="draft">مسودات فقط</option><option value="confirmed">مؤكدة فقط</option></select>
           </div>
           <div style="overflow-x:auto"><table><thead><tr>
-            <th>رقم المحل</th><th>رقم النظام</th><th>الموظف</th><th>العميل</th><th>تاريخ الطلب</th>
-            <th>المنتج</th><th>نوع الطلب</th><th>موعد الاستلام</th>
-            <th>المبلغ</th><th>المتبقي</th><th>الحالة</th><th>تأمين</th><th>إجراءات</th>
+            <th>رقم المحل</th><th>رقم النظام</th><th>الموظف</th><th>العميل</th>
+            <th>المنتج</th><th>نوع الطلب</th><th>تاريخ الطلب</th><th>موعد الاستلام</th>
+            ${(currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts'))?'<th>المبلغ</th><th>المتبقي</th><th>تأمين</th>':''}
+            <th>الحالة</th><th>إجراءات</th>
           </tr></thead><tbody id="ordersTbl"></tbody></table></div>
         </div>
       </div>
@@ -988,13 +989,15 @@ function renderOrders(){
       <td><strong style="color:var(--gold);cursor:pointer" onclick="showQR(${o.id})">#${o.id} 🔳</strong></td>
       <td>${o.employee||'-'}</td>
       <td><div style="font-weight:600">${o.client}${o.returned?` <span class="badge b-red">مرتجع</span>`:''} ${o.isDraft?`<span class="badge b-gray">مسودة</span>`:''}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
-      <td>${o.dressType}</td><td>${o.orderType}</td>
-      <td>${o.deliveryDate}<div style="font-size:9px;color:var(--gr)">${toHijri(o.deliveryDate)}</div></td>
+      <td style="font-size:11px">${o.dressType}</td>
+      <td style="font-size:11px">${o.orderType}</td>
+      <td style="font-size:11px"><div>${o.orderDate||'-'}</div><div style="font-size:9px;color:var(--gold)">${o.orderDate?toHijri(o.orderDate):''}</div></td>
+      <td style="font-size:11px"><div>${o.deliveryDate||'-'}</div><div style="font-size:9px;color:var(--gr)">${o.deliveryDate?toHijri(o.deliveryDate):''}</div></td>
       ${(currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts'))?`
       <td>${(o.amount||0).toLocaleString()}${disc>0?`<div style="font-size:10px;color:var(--red)">خصم:${disc.toLocaleString()}</div>`:''}<div style="font-size:10px;color:var(--gold)">صافي:${calcFinal(o).toLocaleString()}</div></td>
-      <td style="color:${rem>0?'#E74C3C':'#2ECC71'};font-weight:700">${rem.toLocaleString()}</td>`:''}
+      <td style="color:${rem>0?'#E74C3C':'#2ECC71'};font-weight:700">${rem.toLocaleString()}</td>
+      <td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--blue)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'💰 محصّل'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>`:''}
       <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
-      ${(currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts'))?`<td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--blue)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'💰 محصّل'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>`:''}
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         <button class="btn-sm" onclick="showTracking(${o.id})">تتبع</button>
         ${(currentUser.role==='manager'||canDo('canEditOrders'))?`<button class="btn-sm" onclick="openEditOrderModal(${o.id})">✏️ تعديل</button>`:''}
@@ -3635,19 +3638,31 @@ async function deleteSalary(id){
 function addExpItemRow(){
   const cats=cfg.expCats||[];
   const catOpts=cats.map(c=>`<option>${c.name}</option>`).join('');
+  const list=document.getElementById('expItemsList');if(!list)return;
+  const idx=list.querySelectorAll('.exp-item-row').length+1;
   const row=document.createElement('div');
   row.className='exp-item-row';
-  row.style.cssText='background:var(--d3);padding:10px;border-radius:2px;margin-bottom:8px;border:1px solid rgba(201,168,76,.1);position:relative';
+  row.style.cssText='background:var(--d3);padding:12px;border-radius:2px;margin-bottom:10px;border:1px solid rgba(201,168,76,.12)';
   row.innerHTML=`
-    <button type="button" onclick="this.parentElement.remove();calcExpMultiTotal()" style="position:absolute;top:6px;left:6px;background:none;border:none;color:var(--red);cursor:pointer;font-size:16px">✕</button>
-    <div class="fgrid" style="margin-top:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+      <div style="font-size:11px;font-weight:700;color:var(--gold)">بند ${idx}</div>
+      <button type="button" onclick="this.closest('.exp-item-row').remove();calcExpMultiTotal();renumberExpRows()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>
+    </div>
+    <div class="fgrid">
       <div class="fg"><label>البند الرئيسي</label><select class="exp-catm" onchange="updateExpSubsRow(this)">${catOpts}</select></div>
       <div class="fg"><label>البند الفرعي</label><select class="exp-cats"></select></div>
       <div class="fg"><label>الوصف</label><input type="text" class="exp-desc" placeholder="وصف اختياري"></div>
       <div class="fg"><label>المبلغ (ر.س)</label><input type="number" class="exp-amt" placeholder="0" oninput="calcExpMultiTotal()"></div>
     </div>`;
-  document.getElementById('expItemsList').appendChild(row);
+  list.appendChild(row);
   updateExpSubsRow(row.querySelector('.exp-catm'));
+}
+
+function renumberExpRows(){
+  document.querySelectorAll('.exp-item-row').forEach((row,i)=>{
+    const lbl=row.querySelector('[style*="color:var(--gold)"]');
+    if(lbl)lbl.textContent='بند '+(i+1);
+  });
 }
 
 function updateExpSubsRow(sel){
@@ -3659,10 +3674,9 @@ function updateExpSubsRow(sel){
 
 function calcExpMultiTotal(){
   const rows=document.querySelectorAll('.exp-item-row .exp-amt');
-  let total=0;
-  rows.forEach(r=>total+=parseFloat(r.value)||0);
+  let total=0;rows.forEach(r=>total+=parseFloat(r.value)||0);
   const el=document.getElementById('expMultiTotal');
-  if(el)el.textContent=total>0?'الإجمالي: '+total.toLocaleString()+' ر.س':'';
+  if(el){el.style.display=total>0?'block':'none';el.textContent='الإجمالي: '+total.toLocaleString()+' ر.س';}
 }
 
 async function saveMultiExpense(){
