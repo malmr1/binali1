@@ -448,6 +448,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       <div id="orderStatsGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
         <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">طرق الدفع</div><table><thead><tr><th>الطريقة</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="payMethodsTbl"></tbody></table></div>
+        <div class="tw" id="transferRecipientsCard" style="display:none"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">📲 التحويلات حسب المستلم</div><table><thead><tr><th>المحوَّل إليه</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="transferRecipientsTbl"></tbody></table></div>
         <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">أنواع الطلبات</div><table><thead><tr><th>النوع</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="orderTypesTbl"></tbody></table></div>
         <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">حالة الطلبات</div><table><thead><tr><th>الحالة</th><th>العدد</th></tr></thead><tbody id="orderStatusTbl"></tbody></table></div>
         <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">أنواع المنتجات</div><table><thead><tr><th>المنتج</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="productsTbl"></tbody></table></div>
@@ -563,6 +564,7 @@ const DEF={
   ],
   customRoles:[],
   discountEnabled:true,
+  transferRecipients:['حساب المحل الرئيسي'],
 };
 
 // طرق الدفع الثابتة - لا تُحذف ولا تُعدَّل
@@ -1086,7 +1088,7 @@ function openOrderModal(){
 
           <div class="fg"><label>المبلغ الكلي (ر.س) <span style="font-size:9px;color:var(--gr)">يتعبأ تلقائياً</span></label><input type="number" id="fAmt" oninput="calcDiscPreview()" placeholder="0" readonly style="color:var(--gold)"></div>
           <div class="fg"><label>طريقة دفع العربون</label>
-            <select id="fDepMeth" onchange="toggleDepSplit(this.value)">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
+            <select id="fDepMeth" onchange="toggleDepSplit(this.value);toggleTransferRow(this.value,'depTransferRow')">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
           </div>
           <div class="fg"><label>العربون / الدفعة الأولى</label><input type="number" id="fDep" placeholder="0" oninput="calcDepSplit()"></div>
           <div id="depSplitRow" style="display:none;grid-column:1/-1">
@@ -1095,6 +1097,11 @@ function openOrderModal(){
               <div class="fg"><label>شبكة (ر.س)</label><input type="number" id="fDepCard" placeholder="0" oninput="calcDepSplit()"></div>
             </div>
             <div id="depSplitTotal" style="font-size:11px;color:var(--gold);margin-top:4px"></div>
+          </div>
+          <div id="depTransferRow" style="display:none;grid-column:1/-1">
+            <div class="fg"><label>📲 المحوَّل إليه</label>
+              <select id="fDepTransferTo">\${(cfg.transferRecipients||[]).map(r=>`<option>\${r}</option>`).join('')}</select>
+            </div>
           </div>
           <div class="fg" id="insRow" style="display:none"><label>تأمين (ر.س)</label><input type="number" id="fIns" value="0"></div>
           <div class="fg" id="insCollectRow" style="display:none">
@@ -1237,6 +1244,8 @@ async function saveNewOrder(isDraft=false){
     amount:parseFloat(document.getElementById('fAmt').value)||0,
     deposit:parseFloat(document.getElementById('fDep').value)||0,
     pay_method:document.getElementById('fDepMeth')?.value==='__split__'?'مختلط':(document.getElementById('fDepMeth')?.value||'نقدي'),
+    transfer_to:['تحويل','تحويل كامل','تحويل جزئي'].includes(document.getElementById('fDepMeth')?.value)?(document.getElementById('fDepTransferTo')?.value||''):'',
+
     deposit_split:{cash:parseFloat(document.getElementById('fDepCash')?.value)||0,card:parseFloat(document.getElementById('fDepCard')?.value)||0},
     insurance:parseFloat(document.getElementById('fIns')?.value)||0,
     insurance_returned:false,
@@ -1278,7 +1287,7 @@ function openOrderActions(orderId){
       <span>دفعة ${i+1}</span>
       <span style="font-weight:700">${(p.amount||0).toLocaleString()} ر.س</span>
       <span>${p.date||''}</span>
-      <span>${p.method==='مختلط'?`نقدي: ${(p.cash||0).toLocaleString()} + شبكة: ${(p.card||0).toLocaleString()}`:p.method||''}</span>
+      <span>${p.method==='مختلط'?`نقدي: ${(p.cash||0).toLocaleString()} + شبكة: ${(p.card||0).toLocaleString()}`:(p.method||'')}${(p.transferTo&&(p.method==='تحويل'||p.method==='تحويل كامل'||p.method==='تحويل جزئي'))?` ← ${p.transferTo}`:''}</span>
     </div>`).join('');
   document.getElementById('MC').innerHTML=`
   <div class="overlay" onclick="if(event.target===this)closeModal()">
@@ -1296,7 +1305,12 @@ function openOrderActions(orderId){
             </div>
             <div class="fg" style="margin-bottom:8px">
               <label>طريقة الدفع</label>
-              <select id="pMeth" onchange="toggleSplitPayment(this.value)">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
+              <select id="pMeth" onchange="toggleSplitPayment(this.value);toggleTransferRow(this.value,'pTransferRow')">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
+            </div>
+            <div id="pTransferRow" style="display:none;margin-bottom:8px">
+              <div class="fg"><label>📲 المحوَّل إليه</label>
+                <select id="pTransferTo">${(cfg.transferRecipients||[]).map(r=>`<option>${r}</option>`).join('')}</select>
+              </div>
             </div>
             <div id="splitPayRow" style="display:none;background:var(--d4);padding:10px;border-radius:2px;margin-bottom:8px">
               <div class="frow">
@@ -1338,7 +1352,8 @@ async function addPartial(oid){
   if(!amt){showToast('أدخل المبلغ','error');return;}
   const method=document.getElementById('pMeth').value;
   const o=db.orders.find(x=>x.id===oid);
-  let payDetail={amount:amt,date:document.getElementById('pDate').value,method};
+  const transferTo=document.getElementById('pTransferTo')?.value||'';
+  let payDetail={amount:amt,date:document.getElementById('pDate').value,method,transferTo:(method==='تحويل'||method==='تحويل كامل'||method==='تحويل جزئي')?transferTo:''};
   if(method==='__split__'){
     const cash=parseFloat(document.getElementById('pCash').value)||0;
     const card=parseFloat(document.getElementById('pCard').value)||0;
@@ -2185,6 +2200,32 @@ function renderReports(){
   `;
   const payMap={};fOrders.forEach(o=>{const m=o.payMethod||'غير محدد';if(!payMap[m])payMap[m]={count:0,total:0};payMap[m].count++;payMap[m].total+=calcFinal(o);});
   const pmt=document.getElementById('payMethodsTbl');if(pmt)pmt.innerHTML=Object.entries(payMap).map(([k,v])=>`<tr><td>${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--gold)">${v.total.toLocaleString()} ر.س</td></tr>`).join('');
+  // Transfer recipients breakdown
+  const transferMap={};
+  [...fOrders].forEach(o=>{
+    const isTransfer=(m)=>m&&(m==='تحويل'||m==='تحويل كامل'||m==='تحويل جزئي');
+    if(isTransfer(o.payMethod)){
+      const rec=o.transferTo||'غير محدد';
+      if(!transferMap[rec])transferMap[rec]={count:0,total:0};
+      transferMap[rec].count++;transferMap[rec].total+=calcFinal(o);
+    }
+    (o.partials||[]).forEach(p=>{
+      if(isTransfer(p.method)){
+        const rec=p.transferTo||'غير محدد';
+        if(!transferMap[rec])transferMap[rec]={count:0,total:0};
+        transferMap[rec].count++;transferMap[rec].total+=p.amount||0;
+      }
+    });
+  });
+  const trt=document.getElementById('transferRecipientsTbl');
+  if(trt){
+    if(Object.keys(transferMap).length>0){
+      document.getElementById('transferRecipientsCard').style.display='block';
+      trt.innerHTML=Object.entries(transferMap).map(([k,v])=>`<tr><td>${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--gold)">${v.total.toLocaleString()} ر.س</td></tr>`).join('');
+    } else {
+      document.getElementById('transferRecipientsCard').style.display='none';
+    }
+  }
   const typeMap={};fOrders.forEach(o=>{const t=o.orderType||'غير محدد';if(!typeMap[t])typeMap[t]={count:0,total:0};typeMap[t].count++;typeMap[t].total+=calcFinal(o);});
   const ott=document.getElementById('orderTypesTbl');if(ott)ott.innerHTML=Object.entries(typeMap).map(([k,v])=>`<tr><td>${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--gold)">${v.total.toLocaleString()} ر.س</td></tr>`).join('');
   const statusMap={};fOrders.forEach(o=>{const s=o.status||'غير محدد';statusMap[s]=(statusMap[s]||0)+1;});
@@ -2397,6 +2438,12 @@ function renderSettings(){
       <div class="set-ttl">💳 طرق الدفع</div>
       <div class="tag-list">${(cfg.payMethods||[]).map((t,i)=>`<span class="tag">${t}<button class="tag-del" onclick="removeFromArr('payMethods',${i})">✕</button></span>`).join('')}</div>
       <div class="tag-add"><input type="text" id="newPM" placeholder="طريقة جديدة"><button onclick="addToArr('payMethods','newPM')">+</button></div>
+    </div>
+    <div class="set-card">
+      <div class="set-ttl">📲 أسماء المحوَّل إليهم</div>
+      <div style="font-size:11px;color:var(--gr);margin-bottom:8px">تظهر كقائمة منسدلة عند اختيار طريقة دفع تحويل</div>
+      <div class="tag-list">${(cfg.transferRecipients||[]).map((t,i)=>`<span class="tag">${t}<button class="tag-del" onclick="removeFromArr('transferRecipients',${i})">✕</button></span>`).join('')}</div>
+      <div class="tag-add"><input type="text" id="newTR" placeholder="اسم المحوَّل إليه"><button onclick="addToArr('transferRecipients','newTR')">+</button></div>
     </div>
     <div class="set-card">
       <div class="set-ttl">🛤️ مراحل التتبع <span style="font-size:10px;color:var(--gr)">(اسحب لإعادة الترتيب)</span></div>
@@ -3397,6 +3444,11 @@ function getMainOrderType(){
 }
 
 
+
+function toggleTransferRow(val, rowId){
+  const row = document.getElementById(rowId);
+  if(row) row.style.display = (val === 'تحويل' || val === 'تحويل كامل' || val === 'تحويل جزئي') ? 'block' : 'none';
+}
 function toggleSplitPayment(val){
   const row=document.getElementById('splitPayRow');
   if(row)row.style.display=val==='__split__'?'block':'none';
