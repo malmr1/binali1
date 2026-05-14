@@ -264,7 +264,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <div class="fg"><label>كلمة المرور</label>
       <div class="eye-wrap"><input type="password" id="loginPass"><button class="eye-btn" onclick="toggleEye('loginPass',this)" type="button">👁</button></div>
     </div>
-    <button class="btn-primary" onclick="doLogin()">دخول ←</button>
+    <button type="button" class="btn-primary" onclick="doLogin()">دخول ←</button>
     <p id="loginErr" style="color:var(--red);font-size:11px;text-align:center;margin-top:9px;display:none">اسم المستخدم أو كلمة المرور غلط</p>
   </div>
 </div>
@@ -702,7 +702,7 @@ async function doLogin(){
   showLoading('جاري تسجيل الدخول...');
   try{
     const{data,error}=await sb.from('users').select('*').eq('username',u).single();
-    if(error||!data){hideLoading();document.getElementById('loginErr').style.display='block';return;}
+    if(error||!data){hideLoading();const el=document.getElementById('loginErr');el.textContent=error?'خطأ: '+error.message:'اسم المستخدم أو كلمة المرور غلط';el.style.display='block';return;}
     const hashed=await hashPwd(p);
     // Accept: hashed match OR plain text match
     const ok=data.password===hashed||data.password===p;
@@ -1100,7 +1100,7 @@ function openOrderModal(){
           </div>
           <div id="depTransferRow" style="display:none;grid-column:1/-1">
             <div class="fg"><label>📲 المحوَّل إليه</label>
-              <select id="fDepTransferTo">\${(cfg.transferRecipients||[]).map(r=>`<option>\${r}</option>`).join('')}</select>
+              <select id="fDepTransferTo">${(cfg.transferRecipients||[]).map(r=>`<option>${r}</option>`).join('')}</select>
             </div>
           </div>
           <div class="fg" id="insRow" style="display:none"><label>تأمين (ر.س)</label><input type="number" id="fIns" value="0"></div>
@@ -1347,7 +1347,7 @@ function openOrderActions(orderId){
   </div>`;
 }
 
-async function addPartial(oid){
+async async function addPartial(oid){
   const amt=parseFloat(document.getElementById('pAmt').value)||0;
   if(!amt){showToast('أدخل المبلغ','error');return;}
   const method=document.getElementById('pMeth').value;
