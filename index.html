@@ -598,9 +598,11 @@ async function loadSettings(){
 async function saveSetting(key,value){
   const sid=currentShop?.id||1;
   try{
-    const{error:delErr}=await sb.from('settings').delete().eq('key',key).eq('shop_id',sid);
-    const{error:insErr}=await sb.from('settings').insert({key,value,shop_id:sid,updated_at:new Date().toISOString()});
-    if(insErr)throw insErr;
+    const{error}=await sb.from('settings').upsert(
+      {key,value,shop_id:sid,updated_at:new Date().toISOString()},
+      {onConflict:'key,shop_id'}
+    );
+    if(error)throw error;
   }catch(e){console.error('saveSetting error:',e);}
   cfg[key]=value;
 }
