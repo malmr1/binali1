@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 :root{
@@ -528,14 +528,12 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 const SURL='https://pwoamcvnqlkljesjdvuk.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3b2FtY3ZucWxrbGplc2pkdnVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTU2MjEsImV4cCI6MjA4ODc3MTYyMX0.fNIqhl3YAt2wKGFZntGn2wiwUtscgDIHULnPDLjubqQ';
 let sb;
-try{
-  sb=supabase.createClient(SURL,SKEY);
-}catch(e){
-  document.addEventListener('DOMContentLoaded',()=>{
-    const el=document.getElementById('loginErr');
-    if(el){el.textContent='⚠️ خطأ في تحميل المكتبة — تحقق من الإنترنت ثم أعد تحميل الصفحة';el.style.display='block';}
-    const btn=document.querySelector('.btn-primary[onclick*="doLogin"]');
-    if(btn)btn.disabled=false;
+try {
+  sb = supabase.createClient(SURL, SKEY);
+} catch(e) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const err = document.getElementById('loginErr');
+    if(err){ err.textContent = '❌ خطأ تقني: ' + e.message; err.style.display='block'; }
   });
 }
 
@@ -716,17 +714,12 @@ async function hashPwd(pwd){
 
 // ===== LOGIN =====
 async function doLogin(){
-  const errEl=document.getElementById('loginErr');
-  if(!sb){
-    if(errEl){errEl.textContent='⚠️ لا يوجد اتصال بقاعدة البيانات — أعد تحميل الصفحة';errEl.style.display='block';}
-    return;
-  }
+  const errEl = document.getElementById('loginErr');
+  function showErr(msg){ if(errEl){errEl.textContent=msg; errEl.style.display='block';} }
+  if(!sb){ showErr('❌ المكتبة لم تُحمَّل — supabase is undefined'); return; }
   const u=document.getElementById('loginUser').value.trim();
   const p=document.getElementById('loginPass').value.trim();
-  if(!u||!p){
-    if(errEl){errEl.textContent='⚠️ أدخل اسم المستخدم وكلمة المرور';errEl.style.display='block';}
-    return;
-  }
+  if(!u||!p){ showErr('⚠️ أدخل اسم المستخدم وكلمة المرور'); return; }
   showLoading('جاري تسجيل الدخول...');
   try{
     const{data,error}=await sb.from('users').select('*').eq('username',u).single();
@@ -762,7 +755,7 @@ async function doLogin(){
   }catch(e){
     hideLoading();
     const errEl=document.getElementById('loginErr');
-    if(errEl){errEl.textContent='خطأ: '+e.message;errEl.style.display='block';}
+    if(errEl){errEl.textContent='❌ خطأ: '+(e?.message||JSON.stringify(e));errEl.style.display='block';}
     showToast('خطأ: '+e.message,'error');
   }
 }
