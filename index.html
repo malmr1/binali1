@@ -527,7 +527,20 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 // ===== CONFIG =====
 const SURL='https://pwoamcvnqlkljesjdvuk.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3b2FtY3ZucWxrbGplc2pkdnVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTU2MjEsImV4cCI6MjA4ODc3MTYyMX0.fNIqhl3YAt2wKGFZntGn2wiwUtscgDIHULnPDLjubqQ';
-const sb=supabase.createClient(SURL,SKEY);
+let sb = null;
+
+function initSupabase() {
+  try {
+    if (typeof supabase === 'undefined') {
+      throw new Error('مكتبة Supabase لم تُحمَّل - تحقق من الإنترنت');
+    }
+    sb = supabase.createClient(SURL, SKEY);
+  } catch(e) {
+    document.getElementById('loginErr').textContent = '❌ ' + e.message;
+    document.getElementById('loginErr').style.display = 'block';
+  }
+}
+document.addEventListener('DOMContentLoaded', initSupabase);
 
 // ===== STATE =====
 let db={users:[],orders:[],expenses:[],attendance:[],salaries:[],returns:[],deliveries:[],audit:[]};
@@ -706,9 +719,19 @@ async function hashPwd(pwd){
 
 // ===== LOGIN =====
 async function doLogin(){
+  const errEl = document.getElementById('loginErr');
+  if(!sb){
+    errEl.textContent = '❌ لا يوجد اتصال بقاعدة البيانات - أعد تحميل الصفحة';
+    errEl.style.display = 'block';
+    return;
+  }
   const u=document.getElementById('loginUser').value.trim();
   const p=document.getElementById('loginPass').value.trim();
-  if(!u||!p)return;
+  if(!u||!p){
+    errEl.textContent = '⚠️ أدخل اسم المستخدم وكلمة المرور';
+    errEl.style.display = 'block';
+    return;
+  }
   showLoading('جاري تسجيل الدخول...');
   try{
     const{data,error}=await sb.from('users').select('*').eq('username',u).single();
