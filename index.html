@@ -528,24 +528,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 // ===== CONFIG =====
 const SURL='https://pwoamcvnqlkljesjdvuk.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3b2FtY3ZucWxrbGplc2pkdnVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTU2MjEsImV4cCI6MjA4ODc3MTYyMX0.fNIqhl3YAt2wKGFZntGn2wiwUtscgDIHULnPDLjubqQ';
-let _sb=null;
-function getSb(){
-  if(!_sb){
-    if(typeof supabase==='undefined'){
-      alert('المكتبة لم تتحمل — تحقق من الإنترنت وأعد تحميل الصفحة');
-      return null;
-    }
-    _sb=supabase.createClient(SURL,SKEY);
-  }
-  return _sb;
-}
-const sb=new Proxy({},{
-  get:(_,prop)=>{
-    const client=getSb();
-    if(!client)throw new Error('Supabase not loaded');
-    return client[prop].bind(client);
-  }
-});
+const sb=supabase.createClient(SURL,SKEY);
 
 // ===== STATE =====
 let db={users:[],orders:[],expenses:[],attendance:[],salaries:[],returns:[],deliveries:[],audit:[]};
@@ -1375,7 +1358,7 @@ function openOrderActions(orderId){
   </div>`;
 }
 
-async async function addPartial(oid){
+async function addPartial(oid){
   const amt=parseFloat(document.getElementById('pAmt').value)||0;
   if(!amt){showToast('أدخل المبلغ','error');return;}
   const method=document.getElementById('pMeth').value;
