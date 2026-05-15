@@ -26,7 +26,7 @@ body{font-family:'Tajawal',sans-serif;background:var(--black);color:var(--white)
 
 /* ===== LOGIN ===== */
 #loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--black);position:relative;overflow:hidden}
-#loginScreen::before{content:'';position:absolute;inset:-50%;background:radial-gradient(ellipse at center,rgba(201,168,76,.07) 0%,transparent 60%);animation:pulse 4s ease-in-out infinite}
+#loginScreen::before{content:'';position:absolute;inset:-50%;background:radial-gradient(ellipse at center,rgba(201,168,76,.07) 0%,transparent 60%);animation:pulse 4s ease-in-out infinite;pointer-events:none}
 .login-box{background:var(--d2);border:1px solid rgba(201,168,76,.2);border-radius:2px;padding:46px 36px;width:390px;position:relative;z-index:1;animation:fadeIn .6s ease}
 .login-brand{font-size:38px;font-weight:900;color:var(--gold);letter-spacing:4px;text-align:center;display:block}
 .login-sub{font-size:11px;color:var(--gr);letter-spacing:3px;text-align:center;margin-top:3px}
@@ -527,15 +527,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 // ===== CONFIG =====
 const SURL='https://pwoamcvnqlkljesjdvuk.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3b2FtY3ZucWxrbGplc2pkdnVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTU2MjEsImV4cCI6MjA4ODc3MTYyMX0.fNIqhl3YAt2wKGFZntGn2wiwUtscgDIHULnPDLjubqQ';
-let sb;
-try {
-  sb = supabase.createClient(SURL, SKEY);
-} catch(e) {
-  document.addEventListener('DOMContentLoaded', () => {
-    const err = document.getElementById('loginErr');
-    if(err){ err.textContent = '❌ خطأ تقني: ' + e.message; err.style.display='block'; }
-  });
-}
+const sb=supabase.createClient(SURL,SKEY);
 
 // ===== STATE =====
 let db={users:[],orders:[],expenses:[],attendance:[],salaries:[],returns:[],deliveries:[],audit:[]};
@@ -714,12 +706,9 @@ async function hashPwd(pwd){
 
 // ===== LOGIN =====
 async function doLogin(){
-  const errEl = document.getElementById('loginErr');
-  function showErr(msg){ if(errEl){errEl.textContent=msg; errEl.style.display='block';} }
-  if(!sb){ showErr('❌ المكتبة لم تُحمَّل — supabase is undefined'); return; }
   const u=document.getElementById('loginUser').value.trim();
   const p=document.getElementById('loginPass').value.trim();
-  if(!u||!p){ showErr('⚠️ أدخل اسم المستخدم وكلمة المرور'); return; }
+  if(!u||!p)return;
   showLoading('جاري تسجيل الدخول...');
   try{
     const{data,error}=await sb.from('users').select('*').eq('username',u).single();
@@ -755,7 +744,7 @@ async function doLogin(){
   }catch(e){
     hideLoading();
     const errEl=document.getElementById('loginErr');
-    if(errEl){errEl.textContent='❌ خطأ: '+(e?.message||JSON.stringify(e));errEl.style.display='block';}
+    if(errEl){errEl.textContent='خطأ: '+e.message;errEl.style.display='block';}
     showToast('خطأ: '+e.message,'error');
   }
 }
