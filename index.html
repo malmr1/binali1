@@ -448,6 +448,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       <div id="orderStatsGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
         <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">طرق الدفع</div><table><thead><tr><th>الطريقة</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="payMethodsTbl"></tbody></table></div>
+        <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">🏦 التحويلات حسب المستلم</div><table><thead><tr><th>المحول إليه</th><th>العدد</th><th>الإجمالي</th><th>التفاصيل</th></tr></thead><tbody id="transferReportTbl"></tbody></table></div>
         <div class="tw" id="transferRecipientsCard" style="display:none"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">📲 التحويلات حسب المستلم</div><table><thead><tr><th>المحوَّل إليه</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="transferRecipientsTbl"></tbody></table></div>
         <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">أنواع الطلبات</div><table><thead><tr><th>النوع</th><th>العدد</th><th>الإجمالي</th></tr></thead><tbody id="orderTypesTbl"></tbody></table></div>
         <div class="tw"><div style="padding:11px;font-size:12px;font-weight:700;color:var(--gold);border-bottom:1px solid rgba(201,168,76,.1)">حالة الطلبات</div><table><thead><tr><th>الحالة</th><th>العدد</th></tr></thead><tbody id="orderStatusTbl"></tbody></table></div>
@@ -584,7 +585,14 @@ function toggleEye(id,btn){const i=document.getElementById(id);if(i.type==='pass
 // ===== SETTINGS LOAD =====
 async function loadSettings(){
   const sid=currentShop?.id||1;
-  const{data}=await sb.from('settings').select('*').eq('shop_id',sid);
+  let data=null;
+  try{
+    const res=await sb.from('settings').select('*').eq('shop_id',sid);
+    data=res.data;
+  }catch(e){
+    // fallback without shop_id filter
+    try{const res=await sb.from('settings').select('*');data=res.data;}catch(e2){}
+  }
   cfg={...DEF};
   (data||[]).forEach(r=>{try{cfg[r.key]=r.value;}catch(e){}});
   // Load editable builtin roles if saved
@@ -613,15 +621,17 @@ async function saveSetting(key,value){
 async function fetchAll(){
   const today=new Date().toISOString().split('T')[0];
   const sid=currentShop?.id||1;
+  // Use try/catch per table to avoid one failure blocking all
+  const safeQuery=(query)=>query.then(r=>r).catch(e=>({data:[],error:e}));
   const[u,o,e,a,s,r,dlv,au]=await Promise.all([
-    sb.from('users').select('*').eq('shop_id',sid).order('id'),
-    sb.from('orders').select('*').eq('shop_id',sid).order('invoice_number',{ascending:false}),
-    sb.from('expenses').select('*').eq('shop_id',sid).order('date',{ascending:false}),
-    sb.from('attendance').select('*').eq('shop_id',sid).eq('date',today),
-    sb.from('salaries').select('*').eq('shop_id',sid).order('date',{ascending:false}),
-    sb.from('returns').select('*').eq('shop_id',sid).order('date',{ascending:false}),
-    sb.from('deliveries').select('*').eq('shop_id',sid).order('date',{ascending:false}).then(r=>r.error?{data:[]}:r),
-    sb.from('audit_log').select('*').eq('shop_id',sid).order('created_at',{ascending:false}).limit(120).then(r=>r.error?{data:[]}:r),
+    safeQuery(sb.from('users').select('*').eq('shop_id',sid).order('id')),
+    safeQuery(sb.from('orders').select('*').eq('shop_id',sid).order('invoice_number',{ascending:false})),
+    safeQuery(sb.from('expenses').select('*').eq('shop_id',sid).order('date',{ascending:false})),
+    safeQuery(sb.from('attendance').select('*').eq('shop_id',sid).eq('date',today)),
+    safeQuery(sb.from('salaries').select('*').eq('shop_id',sid).order('date',{ascending:false})),
+    safeQuery(sb.from('returns').select('*').eq('shop_id',sid).order('date',{ascending:false})),
+    safeQuery(sb.from('deliveries').select('*').eq('shop_id',sid).order('date',{ascending:false})),
+    safeQuery(sb.from('audit_log').select('*').eq('shop_id',sid).order('created_at',{ascending:false}).limit(120)),
   ]);
   db.users=(u.data||[]).map(x=>({id:x.id,name:x.name,username:x.username,password:x.password,role:x.role,job:x.job,baseSalary:x.base_salary||0}));
   db.orders=(o.data||[]).map(x=>({
@@ -2200,6 +2210,11 @@ function renderReports(){
   `;
   const payMap={};fOrders.forEach(o=>{const m=o.payMethod||'غير محدد';if(!payMap[m])payMap[m]={count:0,total:0};payMap[m].count++;payMap[m].total+=calcFinal(o);});
   const pmt=document.getElementById('payMethodsTbl');if(pmt)pmt.innerHTML=Object.entries(payMap).map(([k,v])=>`<tr><td>${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--gold)">${v.total.toLocaleString()} ر.س</td></tr>`).join('');
+  // Transfer recipients report
+  const transferMap={};
+  fOrders.forEach(o=>{(o.partials||[]).forEach(p=>{if(p.transferTo){if(!transferMap[p.transferTo])transferMap[p.transferTo]={count:0,total:0,full:0,partial:0};transferMap[p.transferTo].count++;transferMap[p.transferTo].total+=p.amount||0;if(p.transferKind==='full')transferMap[p.transferTo].full++;else transferMap[p.transferTo].partial++;}});});
+  const trt=document.getElementById('transferReportTbl');
+  if(trt)trt.innerHTML=Object.keys(transferMap).length?Object.entries(transferMap).map(([k,v])=>`<tr><td style="font-weight:700">${k}</td><td style="color:var(--blue)">${v.count}</td><td style="color:var(--green)">${v.total.toLocaleString()} ر.س</td><td style="color:var(--gr);font-size:11px">كامل: ${v.full} · جزئي: ${v.partial}</td></tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--gr);padding:15px">لا توجد تحويلات</td></tr>';
   // Transfer recipients breakdown
   const transferMap={};
   [...fOrders].forEach(o=>{
@@ -3452,6 +3467,11 @@ function toggleTransferRow(val, rowId){
 function toggleSplitPayment(val){
   const row=document.getElementById('splitPayRow');
   if(row)row.style.display=val==='__split__'?'block':'none';
+  const tRow=document.getElementById('pTransferRow');
+  const tType=document.getElementById('pTransferType');
+  const isTransfer=val==='تحويل'||val==='حوالة'||val?.includes('تحويل');
+  if(tRow)tRow.style.display=isTransfer?'block':'none';
+  if(tType)tType.style.display=isTransfer?'block':'none';
 }
 
 function calcSplitTotal(){
@@ -3772,21 +3792,20 @@ async function loadShops(){
 }
 
 async function initShop(){
-  await loadShops();
+  try{await loadShops();}catch(e){console.warn('shops load failed:',e);allShops=[];}
+  // Fallback if shops empty
+  if(!allShops.length)allShops=[{id:1,name:'بن علي'}];
   // Determine if super admin
   isSuperAdmin=currentUser.username===SUPER_ADMIN_USER||currentUser.role==='manager';
   if(isSuperAdmin){
-    // Super admin sees all shops, defaults to shop 1
     currentShop=allShops.find(s=>s.id===(currentUser.shopId||1))||allShops[0];
-    // Show shop switcher
     const wrap=document.getElementById('shopSwitcherWrap');
     const sel=document.getElementById('shopSwitcher');
-    if(wrap&&sel){
+    if(wrap&&sel&&allShops.length>1){
       wrap.style.display='block';
-      sel.innerHTML=allShops.map(s=>`<option value="${s.id}" ${s.id===currentShop.id?'selected':''}>${s.name}</option>`).join('');
+      sel.innerHTML=allShops.map(s=>`<option value="${s.id}" ${s.id===currentShop?.id?'selected':''}>${s.name}</option>`).join('');
     }
   }else{
-    // Regular user - assign to their shop
     currentShop=allShops.find(s=>s.id===(currentUser.shopId||1))||allShops[0];
   }
   // Update sidebar shop name
