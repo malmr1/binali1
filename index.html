@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 :root{
@@ -527,20 +527,11 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 // ===== CONFIG =====
 const SURL='https://pwoamcvnqlkljesjdvuk.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3b2FtY3ZucWxrbGplc2pkdnVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTU2MjEsImV4cCI6MjA4ODc3MTYyMX0.fNIqhl3YAt2wKGFZntGn2wiwUtscgDIHULnPDLjubqQ';
-let sb = null;
-
-function initSupabase() {
-  try {
-    if (typeof supabase === 'undefined') {
-      throw new Error('مكتبة Supabase لم تُحمَّل - تحقق من الإنترنت');
-    }
-    sb = supabase.createClient(SURL, SKEY);
-  } catch(e) {
-    document.getElementById('loginErr').textContent = '❌ ' + e.message;
-    document.getElementById('loginErr').style.display = 'block';
-  }
+if(typeof supabase==='undefined'){
+  alert('خطأ: فشل تحميل المكتبة الأساسية. تحقق من الإنترنت وأعد تحميل الصفحة.');
+  throw new Error('supabase not loaded');
 }
-document.addEventListener('DOMContentLoaded', initSupabase);
+const sb=supabase.createClient(SURL,SKEY);
 
 // ===== STATE =====
 let db={users:[],orders:[],expenses:[],attendance:[],salaries:[],returns:[],deliveries:[],audit:[]};
@@ -719,19 +710,9 @@ async function hashPwd(pwd){
 
 // ===== LOGIN =====
 async function doLogin(){
-  const errEl = document.getElementById('loginErr');
-  if(!sb){
-    errEl.textContent = '❌ لا يوجد اتصال بقاعدة البيانات - أعد تحميل الصفحة';
-    errEl.style.display = 'block';
-    return;
-  }
   const u=document.getElementById('loginUser').value.trim();
   const p=document.getElementById('loginPass').value.trim();
-  if(!u||!p){
-    errEl.textContent = '⚠️ أدخل اسم المستخدم وكلمة المرور';
-    errEl.style.display = 'block';
-    return;
-  }
+  if(!u||!p)return;
   showLoading('جاري تسجيل الدخول...');
   try{
     const{data,error}=await sb.from('users').select('*').eq('username',u).single();
