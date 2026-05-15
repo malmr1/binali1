@@ -528,9 +528,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 // ===== CONFIG =====
 const SURL='https://pwoamcvnqlkljesjdvuk.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3b2FtY3ZucWxrbGplc2pkdnVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTU2MjEsImV4cCI6MjA4ODc3MTYyMX0.fNIqhl3YAt2wKGFZntGn2wiwUtscgDIHULnPDLjubqQ';
-let sb;
-try{ sb=supabase.createClient(SURL,SKEY); }
-catch(e){ console.error('Supabase failed:',e); }
+const sb=supabase.createClient(SURL,SKEY);
 
 // ===== STATE =====
 let db={users:[],orders:[],expenses:[],attendance:[],salaries:[],returns:[],deliveries:[],audit:[]};
@@ -726,11 +724,14 @@ async function doLogin(){
       try{await sb.from('users').update({password:hashed}).eq('id',data.id);}catch(e){}
     }
     try{
+      // MUST init shop first so currentShop is set before loadSettings
+      try{await loadShops();}catch(e){allShops=[{id:1,name:'بن علي'}];}
+      if(!allShops.length)allShops=[{id:1,name:'بن علي'}];
+      currentShop=allShops.find(s=>s.id===(currentUser.shopId||1))||allShops[0];
       await loadSettings();
-      // Clean up ALL role override settings that can cause pages to disappear
+      // Clean up role overrides
       await sb.from('settings').delete().eq('key','builtinRoles').then(()=>{}).catch(()=>{});
       await sb.from('settings').delete().eq('key','role_pages_manager').then(()=>{}).catch(()=>{});
-      // Re-force manager pages after cleanup
       BUILTIN_ROLES.manager.pages=['dashboard','orders','tracking','attendance','attend-report','salaries','expenses','returns','reports','employees','settings','audit'];
       await fetchAll();
     }catch(fe){
@@ -765,6 +766,9 @@ window.addEventListener('load',async()=>{
   if(saved){
     try{
       currentUser=JSON.parse(saved);showLoading('...');
+      try{await loadShops();}catch(e){allShops=[{id:1,name:'بن علي'}];}
+      if(!allShops.length)allShops=[{id:1,name:'بن علي'}];
+      currentShop=allShops.find(s=>s.id===(currentUser.shopId||1))||allShops[0];
       await loadSettings();await fetchAll();hideLoading();
       document.getElementById('loginScreen').style.display='none';
       document.getElementById('app').style.display='block';
@@ -1362,7 +1366,7 @@ function openOrderActions(orderId){
 
 async function addPartial(oid){
   const amt=parseFloat(document.getElementById('pAmt').value)||0;
-  if(!amt){showToast('أدخل المبلغ','error');return;}
+  if(!amt||amt<=0){showToast('أدخل مبلغاً صحيحاً','error');return;}
   const method=document.getElementById('pMeth').value;
   const o=db.orders.find(x=>x.id===oid);
   const transferTo=document.getElementById('pTransferTo')?.value||'';
