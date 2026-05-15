@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>نظام الإدارة</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 :root{
@@ -527,11 +528,24 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 // ===== CONFIG =====
 const SURL='https://pwoamcvnqlkljesjdvuk.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3b2FtY3ZucWxrbGplc2pkdnVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTU2MjEsImV4cCI6MjA4ODc3MTYyMX0.fNIqhl3YAt2wKGFZntGn2wiwUtscgDIHULnPDLjubqQ';
-if(typeof supabase==='undefined'){
-  alert('خطأ: فشل تحميل المكتبة الأساسية. تحقق من الإنترنت وأعد تحميل الصفحة.');
-  throw new Error('supabase not loaded');
+let _sb=null;
+function getSb(){
+  if(!_sb){
+    if(typeof supabase==='undefined'){
+      alert('المكتبة لم تتحمل — تحقق من الإنترنت وأعد تحميل الصفحة');
+      return null;
+    }
+    _sb=supabase.createClient(SURL,SKEY);
+  }
+  return _sb;
 }
-const sb=supabase.createClient(SURL,SKEY);
+const sb=new Proxy({},{
+  get:(_,prop)=>{
+    const client=getSb();
+    if(!client)throw new Error('Supabase not loaded');
+    return client[prop].bind(client);
+  }
+});
 
 // ===== STATE =====
 let db={users:[],orders:[],expenses:[],attendance:[],salaries:[],returns:[],deliveries:[],audit:[]};
