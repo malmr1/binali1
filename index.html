@@ -570,7 +570,7 @@ const DEF={
 };
 
 // طرق الدفع الثابتة - لا تُحذف ولا تُعدَّل
-const FIXED_PAY=['نقدي','شبكة','تحويل','مختلط (نقدي+شبكة)'];
+const FIXED_PAY=['نقدي','شبكة','تحويل كامل','تحويل جزئي','مختلط (نقدي+شبكة)'];
 function getPayOpts(selected=''){
   return FIXED_PAY.map(p=>`<option value="${p}" ${selected===p?'selected':''}>${p}</option>`).join('');
 }
@@ -1062,7 +1062,7 @@ function openOrderModal(){
   const empOpts=db.users.filter(u=>['staff','manager'].includes(u.role)).map(u=>`<option value="${u.name}">${u.name}</option>`).join('');
   const prods=(cfg.products||[]).map(t=>`<option>${t}</option>`).join('');
   const types=(cfg.orderTypes||[]).map(t=>`<option>${t}</option>`).join('');
-  const pays=(cfg.payMethods||[]).map(t=>`<option>${t}</option>`).join('');
+  const pays=getPayOpts();
   const steps=(cfg.trackingSteps||[]).map(s=>`<option>${s.name}</option>`).join('');
   const today=new Date().toISOString().split('T')[0];
   document.getElementById('MC').innerHTML=`
@@ -1297,7 +1297,7 @@ async function saveNewOrder(isDraft=false){
 
 function openOrderActions(orderId){
   const o=db.orders.find(x=>x.id===orderId);if(!o)return;
-  const pays=(cfg.payMethods||[]).map(t=>`<option>${t}</option>`).join('');
+  const pays=getPayOpts();
   const canEditDel=currentUser.role==='manager'||canDo('canEditDelivery');
   const partials=(o.partials||[]).map((p,i)=>`
     <div style="display:flex;justify-content:space-between;background:var(--d4);padding:6px 9px;border-radius:2px;margin-bottom:4px;font-size:11px">
@@ -2764,7 +2764,8 @@ function calcDelNet(){
 }
 function toggleDelTransfer(val){
   const el=document.getElementById('dTransferNote');
-  if(el)el.style.display=val==='تحويل'?'block':'none';
+  const isTransfer=val==='تحويل'||val==='تحويل كامل'||val==='تحويل جزئي';
+  if(el)el.style.display=isTransfer?'block':'none';
 }
 
 async function saveDelivery2(){
@@ -3258,7 +3259,7 @@ async function doFormat(){
 function openEditDelivery(delId){
   const d=db.deliveries.find(x=>x.id===delId);if(!d)return;
   const canEditIns=currentUser.role==='manager'||canDo('canEditDeliveryRecord');
-  const pays=(cfg.payMethods||[]).map(t=>`<option ${d.payMethod===t?'selected':''}>${t}</option>`).join('');
+  const pays=getPayOpts(d.payMethod||'');
   document.getElementById('MC').innerHTML=`
   <div class="overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal modal-sm">
@@ -3893,20 +3894,41 @@ async function saveMultiExpense(){
     const catM=row.querySelector('.exp-catm')?.value||'';
     const catS=row.querySelector('.exp-cats')?.value||'';
     const desc=row.querySelector('.exp-desc')?.value||'';
-    if(amt>0)items.push({cat_main:catM,cat_sub:catS,description:desc,amount:amt,date,created_by:currentUser.name,shop_id:currentShop?.id||1});
+    // فقط البنود اللي عندها مبلغ وبند رئيسي
+    if(amt>0&&catM)items.push({
+      cat_main:catM,
+      cat_sub:catS||null,
+      description:desc||null,
+      amount:amt,
+      date,
+      shop_id:currentShop?.id||1
+    });
   });
-  if(!items.length){showToast('أضف بنداً واحداً على الأقل','error');return;}
+  if(!items.length){showToast('أضف بنداً واحداً على الأقل بمبلغ وبند رئيسي','error');return;}
   showLoading('جاري الحفظ...');
-  await sb.from('expenses').insert(items);
-  await logAudit('إضافة مصروفات','expenses',0,`${items.length} بند - ${date}`);
-  await fetchAll();hideLoading();closeModal();renderExpenses();
-  showToast(`✅ تم حفظ ${items.length} بند`,'success');
+  // أدخل بند بند لتجنب فشل الكامل لو في خطأ بسجل واحد
+  let saved=0,failed=0;
+  for(const item of items){
+    const{error}=await sb.from('expenses').insert(item);
+    if(error){
+      console.error('خطأ في حفظ المصروف:',error,item);
+      failed++;
+    } else {
+      saved++;
+    }
+  }
+  if(saved>0)await logAudit('إضافة مصروفات','expenses',0,`${saved} بند - ${date}`);
+  await fetchAll();
+  hideLoading();
+  closeModal();
+  renderExpenses();
+  if(failed>0)showToast(`⚠️ تم حفظ ${saved} بند، فشل ${failed} - تحقق من Console`,'error');
+  else showToast(`✅ تم حفظ ${saved} بند`,'success');
 }
 
 // ===== DELIVERY ACTIONS =====
 function openDeliveryActions(delId){
   const d=db.deliveries.find(x=>x.id===delId);if(!d)return;
-  const pays=(cfg.payMethods||[]).map(t=>`<option>${t}</option>`).join('');
   document.getElementById('MC').innerHTML=`
   <div class="overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal modal-sm">
@@ -3922,7 +3944,10 @@ function openDeliveryActions(delId){
         </div>
         <div id="daPaySection">
           <div class="fg"><label>طريقة الدفع</label>
-            <select id="daPayMeth" onchange="toggleDaSplit(this.value)">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
+            <select id="daPayMeth" onchange="toggleDaTransfer(this.value)">${getPayOpts()}</select>
+          </div>
+          <div id="daTransferNote" style="display:none">
+            <div class="fg"><label>📋 المحوَّل إليه</label><input type="text" id="daTransferTo" placeholder="اسم المستلم"></div>
           </div>
           <div class="fg"><label>المبلغ (ر.س)</label><input type="number" id="daAmt" placeholder="0" oninput="calcDaSplit()"></div>
           <div id="daSplitRow" style="display:none">
@@ -3948,6 +3973,11 @@ function openDeliveryActions(delId){
   </div>`;
 }
 
+function toggleDaTransfer(val){
+  const el=document.getElementById('daTransferNote');
+  const isT=val==='تحويل كامل'||val==='تحويل جزئي'||val==='تحويل';
+  if(el)el.style.display=isT?'block':'none';
+}
 function toggleDeliveryActionType(val){
   document.getElementById('daPaySection').style.display=val==='discount'?'none':'block';
   document.getElementById('daDiscSection').style.display=val==='discount'?'block':'none';
