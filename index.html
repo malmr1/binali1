@@ -291,7 +291,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
       <div class="topbar"><div><div class="pg-title">لوحة التحكم</div><div class="pg-sub" id="dashDate"></div></div>
-        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(renderDashboard)" title="تحديث">🔄 تحديث</button></div>
+        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(()=>renderDashboard())" title="تحديث">🔄 تحديث</button></div>
         <div style="display:flex;gap:8px"><button class="btn-sm" onclick="exportExcel()">📥 Excel</button></div>
       </div>
       <div id="delivAlerts"></div>
@@ -312,7 +312,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <div class="page" id="page-orders">
       <div class="topbar"><div><div class="pg-title">الطلبات</div></div>
         <div style="display:flex;gap:7px;align-items:center">
-          <button class="btn-sm" onclick="fetchAll().then(renderOrders)" title="تحديث البيانات">🔄 تحديث</button>
+          <button class="btn-sm" onclick="fetchAll().then(()=>renderOrders())" title="تحديث البيانات">🔄 تحديث</button>
           <button class="btn-add" onclick="openOrderModal()" id="btnAddOrder">+ طلب جديد</button>
         </div>
       </div>
@@ -381,7 +381,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <!-- ATTENDANCE -->
     <div class="page" id="page-attendance">
       <div class="topbar"><div><div class="pg-title">الحضور والانصراف</div></div>
-        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(renderAttendance)" title="تحديث">🔄 تحديث</button></div>
+        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(()=>renderAttendance())" title="تحديث">🔄 تحديث</button></div>
         <button class="btn-sm" id="btnAttRep" onclick="switchPage('attend-report')" style="display:none">📋 تقرير الحضور</button>
       </div>
       <div class="attend-box">
@@ -431,7 +431,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <!-- EXPENSES -->
     <div class="page" id="page-expenses">
       <div class="topbar"><div><div class="pg-title">المصروفات</div></div>
-        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(renderExpenses)" title="تحديث">🔄 تحديث</button></div>
+        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(()=>renderExpenses())" title="تحديث">🔄 تحديث</button></div>
         <button class="btn-add" onclick="openExpModal()">+ إضافة مصروف</button>
       </div>
       <div class="tw"><table><thead><tr><th>#</th><th>التاريخ</th><th>البند الرئيسي</th><th>البند الفرعي</th><th>الوصف</th><th>المبلغ</th><th>إجراءات</th></tr></thead><tbody id="expTbl"></tbody></table></div>
@@ -449,7 +449,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <div class="page" id="page-reports">
       <div class="topbar">
         <div><div class="pg-title">التقارير المالية</div></div>
-        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(renderReports)" title="تحديث">🔄 تحديث</button></div>
+        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(()=>renderReports())" title="تحديث">🔄 تحديث</button></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="date" class="fi" id="repFrom" onchange="renderReports()">
           <span style="color:var(--gr)">إلى</span>
@@ -507,7 +507,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <!-- DELIVERIES -->
     <div class="page" id="page-deliveries">
       <div class="topbar"><div><div class="pg-title">التسليمات</div><div class="pg-sub">تسجيل التسليمات النهائية</div></div>
-        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(renderDeliveries)" title="تحديث">🔄 تحديث</button></div>
+        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(()=>renderDeliveries())" title="تحديث">🔄 تحديث</button></div>
         <button class="btn-add" onclick="openDeliveryModal()" id="btnAddDelivery">+ تسليم جديد</button>
       </div>
       <div class="tw">
@@ -1019,11 +1019,11 @@ function renderDashboard(){
     upSec.style.display=upcoming.length?'block':'none';
     upList.innerHTML=upcoming.map(o=>{
       const days=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,140,0,.07);border-radius:4px;margin-bottom:5px;border-right:3px solid #FF8C00">
-        <div>
+      return `<div onclick="openOrderActions(${o.id})" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,140,0,.07);border-radius:4px;margin-bottom:5px;border-right:3px solid #FF8C00;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:8px">
           <strong style="color:var(--gold)">#${o.id}</strong>
-          <span style="margin:0 8px">${o.client}</span>
-          <span class="badge ${days===0?'b-red':days<=3?'b-amber':'b-blue'}">${days===0?'اليوم':days===1?'غداً':days+' أيام'}</span>
+          <span>${o.client}</span>
+          <span class="badge ${days===0?'b-red':days<=3?'b-amber':'b-blue'}">${days===0?'⚠️ اليوم':days===1?'⚠️ غداً':'⏳ '+days+' أيام'}</span>
         </div>
         <div style="font-size:11px;color:var(--gr)">${o.deliveryDate}</div>
       </div>`;
@@ -1056,6 +1056,33 @@ function renderOrders(){
   const draftF=document.getElementById('orderDraftF')?.value||'';
   const canAdd=currentUser.role==='manager'||currentUser.role==='staff'||canDo('canAddOrder');
   document.getElementById('btnAddOrder').style.display=canAdd?'inline-flex':'none';
+  // If called from dashboard upcoming section, filter to next 7 days only
+  if(window._filterUpcoming){
+    const upcomingIds=new Set(db.orders.filter(o=>{
+      if(o.isDraft||!o.deliveryDate)return false;
+      const d=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
+      return d>=0&&d<=7;
+    }).map(o=>o.id));
+    window._filterUpcoming=false;
+    // Highlight in order search or just show them
+    const list2=db.orders.filter(o=>upcomingIds.has(o.id)).sort((a,b)=>new Date(a.deliveryDate)-new Date(b.deliveryDate));
+    const tbody=document.getElementById('ordersTbl');
+    if(tbody){
+      const canAmt=currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts');
+      tbody.innerHTML=list2.map(o=>{
+        const daysLeft=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
+        const badge=daysLeft===0?'<span class="badge b-red">اليوم</span>':daysLeft===1?'<span class="badge b-amber">غداً</span>':`<span class="badge b-blue">${daysLeft} أيام</span>`;
+        return `<tr style="${getOrderRowStyle(o)}">
+          <td colspan="2"><strong style="color:var(--gold)">#${o.id}</strong> ${badge}</td>
+          <td>${o.client}</td>
+          <td>${o.deliveryDate||'-'}</td>
+          <td>${o.status||'-'}</td>
+          <td><button class="btn-sm" onclick="openOrderActions(${o.id})">إجراءات</button></td>
+        </tr>`;
+      }).join('')||'<tr><td colspan="6" style="text-align:center;padding:22px;color:var(--gr)">لا توجد طلبات قريبة</td></tr>';
+    }
+    return;
+  }
   let list=[...db.orders].sort((a,b)=>new Date(b.orderDate||0)-new Date(a.orderDate||0)).filter(o=>{
     let ms=false;
     if(!search){ms=true;}
@@ -1156,7 +1183,7 @@ function openOrderModal(){
 
           <div class="fg"><label>المبلغ الكلي (ر.س) <span style="font-size:9px;color:var(--gr)">يتعبأ تلقائياً</span></label><input type="number" id="fAmt" oninput="calcDiscPreview()" placeholder="0" readonly style="color:var(--gold)"></div>
           <div class="fg"><label>طريقة دفع العربون</label>
-            <select id="fDepMeth" onchange="toggleDepSplit(this.value);toggleTransferRow(this.value,'depTransferRow')">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
+            <select id="fDepMeth" onchange="toggleDepSplit(this.value);toggleTransferRow(this.value,'depTransferRow')">${getPayOpts()}</select>
           </div>
           <div class="fg"><label>العربون / الدفعة الأولى</label><input type="number" id="fDep" placeholder="0" oninput="calcDepSplit()"></div>
           <div id="depSplitRow" style="display:none;grid-column:1/-1">
@@ -1368,7 +1395,7 @@ function openOrderActions(orderId){
             </div>
             <div class="fg" style="margin-bottom:8px">
               <label>طريقة الدفع</label>
-              <select id="pMeth" onchange="toggleSplitPayment(this.value);toggleTransferRow(this.value,'pTransferRow')">${pays}<option value="__split__">مختلط (نقدي + شبكة)</option></select>
+              <select id="pMeth" onchange="toggleSplitPayment(this.value);toggleTransferRow(this.value,'pTransferRow')">${getPayOpts()}</select>
             </div>
             <div id="pTransferRow" style="display:none;margin-bottom:8px">
               <div class="fg"><label>📲 المحوَّل إليه</label>
@@ -1689,7 +1716,7 @@ function printPayInvoice(oid){
       <span>${p.label} — ${p.method}${p.date?' ('+p.date+')':''}</span>
       <span style="color:var(--green,#27ae60)">${p.amount.toLocaleString()} ر.س</span>
     </div>`).join('');
-  const pa=document.getElementById('printArea');pa.style.display='block';
+  const pa=document.getElementById('printArea');pa.style.display='block';pa.style.padding='0';
   pa.innerHTML=`<div class="inv-wrap" style="max-width:190mm;margin:0 auto;padding:10mm;font-family:Tajawal,sans-serif;color:#222">
     <div style="text-align:center;font-size:20px;font-weight:900;color:#C9A84C;margin-bottom:4px">${cfg.shopName||currentShop?.name||'نظام الإدارة'}</div>
     <div style="text-align:center;font-size:12px;color:#777;margin-bottom:12px">${cfg.shopPhone||''}</div>
@@ -2614,9 +2641,19 @@ function detectLoc(){navigator.geolocation.getCurrentPosition(p=>{document.getEl
 function addShift(){cfg.shifts.push({name:'شفت جديد',start:'08:00',end:'16:00'});renderSettings();}
 function removeShift(i){cfg.shifts.splice(i,1);renderSettings();}
 function addTrackStep(){cfg.trackingSteps.push({name:'خطوة جديدة',subs:[]});renderSettings();}
-function removeTrackStep(i){cfg.trackingSteps.splice(i,1);renderSettings();}
-function addTrackSub(si){const v=document.getElementById(`tsSub${si}`)?.value.trim();if(!v)return;cfg.trackingSteps[si].subs.push(v);renderSettings();}
-function removeTrackSub(si,subi){cfg.trackingSteps[si].subs.splice(subi,1);renderSettings();}
+function removeTrackStep(i){
+  cfg.trackingSteps.splice(i,1);
+  saveSetting('trackingSteps',cfg.trackingSteps);
+  renderSettings();
+}
+function updateTrackStepColor(i,color){
+  if(!cfg.trackingSteps[i])return;
+  cfg.trackingSteps[i].color=color;
+  saveSetting('trackingSteps',cfg.trackingSteps);
+  renderOrders();
+}
+function addTrackSub(si){const v=document.getElementById(`tsSub${si}`)?.value.trim();if(!v)return;cfg.trackingSteps[si].subs.push(v);saveSetting('trackingSteps',cfg.trackingSteps);renderSettings();}
+function removeTrackSub(si,subi){cfg.trackingSteps[si].subs.splice(subi,1);saveSetting('trackingSteps',cfg.trackingSteps);renderSettings();}
 function addExpCat(){const v=document.getElementById('newExpCat')?.value.trim();if(!v)return;cfg.expCats.push({name:v,subs:[]});saveSetting('expCats',cfg.expCats);renderSettings();}
 function removeExpCat(i){cfg.expCats.splice(i,1);saveSetting('expCats',cfg.expCats);renderSettings();}
 function addExpSub(ci){const v=document.getElementById(`eSubInp${ci}`)?.value.trim();if(!v)return;cfg.expCats[ci].subs.push(v);saveSetting('expCats',cfg.expCats);renderSettings();}
@@ -2930,7 +2967,7 @@ function printMeasurements(orderId){
   const m=o.measurements||{};
   const ei=o.extraItems||[];
   const pa=document.getElementById('printArea');
-  pa.style.display='flex';pa.style.flexDirection='column';pa.style.alignItems='center';
+  pa.style.display='block';
   const mRows=MEASUREMENTS_FIELDS.filter(f=>m[f.key]).map(f=>`
     <tr><td style="border:1px solid #ddd;padding:6px 9px;font-weight:600">${f.label}</td>
     <td style="border:1px solid #ddd;padding:6px 9px;text-align:center;font-weight:700">${m[f.key]} سم</td></tr>`).join('');
@@ -2955,7 +2992,7 @@ function printMeasurements(orderId){
     <table style="width:100%;border-collapse:collapse">${eiRows}</table>`:''}
     <div style="text-align:center;margin-top:14px;font-size:9px;color:#aaa">تم الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>
   </div>`;
-  setTimeout(()=>{window.print();pa.style.display='none';pa.style.flexDirection='';pa.style.alignItems='';},300);
+  setTimeout(()=>{window.print();pa.style.display='none';},300);
 }
 
 
@@ -3981,7 +4018,7 @@ function openDeliveryActions(delId){
         </div>
         <div id="daPaySection">
           <div class="fg"><label>طريقة الدفع</label>
-            <select id="daPayMeth" onchange="toggleDaTransfer(this.value)">${getPayOpts()}</select>
+            <select id="daPayMeth" onchange="toggleDaTransfer(this.value);toggleDaSplit(this.value)">${getPayOpts()}<option value="__split__">مختلط (نقدي+شبكة)</option></select>
           </div>
           <div id="daTransferNote" style="display:none">
             <div class="fg"><label>📋 المحوَّل إليه</label><input type="text" id="daTransferTo" placeholder="اسم المستلم"></div>
