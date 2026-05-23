@@ -1305,6 +1305,19 @@ async function saveNewOrder(isDraft=false){
   const inv=isDraft?0:nextInvoice++;
   const tracking=isDraft?[]:[{step:'استلام الطلب',sub:'',who:currentUser.name,when:new Date().toLocaleString('ar-SA')}];
   showLoading(isDraft?'جاري حفظ المسودة...':'جاري الحفظ...');
+  // تسجيل العربون كدخل في expenses بتاريخ الطلب
+  const depositAmt=parseFloat(document.getElementById('fDep').value)||0;
+  const orderDateVal=document.getElementById('fODate').value||new Date().toISOString().split('T')[0];
+  if(depositAmt>0&&!isDraft){
+    await sb.from('expenses').insert({
+      shop_id:currentShop?.id||1,
+      date:orderDateVal,
+      cat_main:'إيرادات',
+      cat_sub:'عربون',
+      description:`عربون طلب #${inv} - ${document.getElementById('fClient').value||''}`,
+      amount:-depositAmt,
+    });
+  }
   const{error}=await sb.from('orders').insert({
     shop_id:currentShop?.id||1,
     invoice_number:inv,local_invoice:document.getElementById('fLocal').value||null,
@@ -2351,29 +2364,52 @@ function renderReports(){
   const fExp=db.expenses.filter(e=>{const d=new Date(e.date);return d>=from&&d<=to;});
   const fReturns=db.returns.filter(r=>{const d=new Date(r.date);return d>=from&&d<=to;});
   const fDeliveries=db.deliveries.filter(d=>{const dt=new Date(d.date);return dt>=from&&dt<=to;});
-  // الإيراد يُحسب من المبلغ الكامل بدون خصم
-  const sales=fOrders.reduce((s,o)=>s+(o.amount||0),0);
-  const totalDiscounts=fOrders.reduce((s,o)=>s+calcDisc(o),0);
-  const collected=fOrders.reduce((s,o)=>s+calcPaid(o),0);
-  // الخصم يُضاف للمصروفات
-  const expenses=fExp.filter(e=>(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
-  const uncollected=fOrders.reduce((s,o)=>s+Math.max(0,calcRem(o)),0);
-  const returnsAmt=fReturns.reduce((s,r)=>s+(r.amount||0),0);
-  // Deliveries revenue (independent deliveries not linked to orders)
-  const delivRevenue=fDeliveries.reduce((s,d)=>s+(d.receivedAmount||0),0);
-  const delivCount=fDeliveries.length;
-  const netCollected=collected+delivRevenue-returnsAmt;
-  const profit=netCollected-expenses;
+
+  // ===== معلومات فقط (لا تدخل في الحسابات) =====
+  const salesInfo=fOrders.reduce((s,o)=>s+(o.amount||0),0); // إجمالي المبيعات للمعلومات
+  const uncollected=fOrders.reduce((s,o)=>s+Math.max(0,calcRem(o)),0); // المتبقي للمعلومات
+
+  // ===== الحسابات الفعلية من expenses فقط =====
+  // الدخل = كل قيمة سالبة في expenses (دفعات، عربون، تأمين محصّل)
+  const totalIncome=fExp.filter(e=>(e.amount||0)<0).reduce((s,e)=>s+Math.abs(e.amount||0),0);
+  // الخرج = كل قيمة موجبة في expenses (مصروفات، خصومات، مرتجعات، استرداد تأمين)
+  const totalExpenses=fExp.filter(e=>(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
+  // صافي الربح = الدخل - الخرج
+  const profit=totalIncome-totalExpenses;
+
+  // تفاصيل الدخل
   const insIncome=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)<0).reduce((s,e)=>s+Math.abs(e.amount||0),0);
   const insOut=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
+  const returnsAmt=fReturns.reduce((s,r)=>s+(r.amount||0),0);
+
   document.getElementById('finGrid').innerHTML=`
-    <div class="fin-card"><div class="fc-lbl">المبيعات</div><div class="fc-val" style="color:var(--gold)">${sales.toLocaleString()}<small> ر.س</small></div><div class="fc-sub">${fOrders.length} طلب · غير محصل: ${uncollected.toLocaleString()} ر.س</div></div>
-    <div class="fin-card"><div class="fc-lbl">التسليمات <small style="color:var(--gr);font-size:10px">القديم</small></div><div class="fc-val" style="color:var(--blue)">${delivRevenue.toLocaleString()}<small> ر.س</small></div><div class="fc-sub">${delivCount} تسليم</div></div>
-    <div class="fin-card"><div class="fc-lbl">صافي الإيرادات</div><div class="fc-val" style="color:var(--green)">${netCollected.toLocaleString()}<small> ر.س</small></div></div>
-    <div class="fin-card"><div class="fc-lbl">المصروفات</div><div class="fc-val" style="color:var(--red)">${expenses.toLocaleString()}<small> ر.س</small></div></div>
-    <div class="fin-card"><div class="fc-lbl">المرتجعات (${fReturns.length})</div><div class="fc-val" style="color:var(--red)">-${returnsAmt.toLocaleString()}<small> ر.س</small></div></div>
-    <div class="fin-card"><div class="fc-lbl">صافي الإيرادات</div><div class="fc-val" style="color:var(--gold)">${netCollected.toLocaleString()}<small> ر.س</small></div></div>
-    <div class="fin-card"><div class="fc-lbl">صافي الربح</div><div class="fc-val" style="color:${profit>=0?'var(--green)':' var(--red)'}">${profit.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card" style="border:1px solid rgba(201,168,76,.2)">
+      <div style="font-size:9px;color:var(--gr);letter-spacing:2px;margin-bottom:3px">للمعلومات فقط</div>
+      <div class="fc-lbl">إجمالي المبيعات</div>
+      <div class="fc-val" style="color:var(--gold)">${salesInfo.toLocaleString()}<small> ر.س</small></div>
+      <div style="font-size:10px;color:var(--gr);margin-top:3px">${fOrders.length} طلب</div>
+    </div>
+    <div class="fin-card" style="border:1px solid rgba(201,168,76,.2)">
+      <div style="font-size:9px;color:var(--gr);letter-spacing:2px;margin-bottom:3px">للمعلومات فقط</div>
+      <div class="fc-lbl">المتبقي غير المحصل</div>
+      <div class="fc-val" style="color:var(--orange)">${uncollected.toLocaleString()}<small> ر.س</small></div>
+    </div>
+    <div class="fin-card" style="border-right:3px solid var(--green)">
+      <div class="fc-lbl">💰 إجمالي الدخل</div>
+      <div class="fc-val" style="color:var(--green)">${totalIncome.toLocaleString()}<small> ر.س</small></div>
+      <div style="font-size:10px;color:var(--gr);margin-top:3px">كل مبلغ دخل الصندوق فعلاً</div>
+    </div>
+    <div class="fin-card" style="border-right:3px solid var(--red)">
+      <div class="fc-lbl">📤 إجمالي الخرج</div>
+      <div class="fc-val" style="color:var(--red)">${totalExpenses.toLocaleString()}<small> ر.س</small></div>
+      <div style="font-size:10px;color:var(--gr);margin-top:3px">مصروفات + خصومات + مرتجعات</div>
+    </div>
+    <div class="fin-card" style="border-right:3px solid ${profit>=0?'var(--green)':'var(--red)'}">
+      <div class="fc-lbl">📊 صافي الربح</div>
+      <div class="fc-val" style="color:${profit>=0?'var(--green)':'var(--red)'}">${profit.toLocaleString()}<small> ر.س</small></div>
+      <div style="font-size:10px;color:var(--gr);margin-top:3px">الدخل - الخرج</div>
+    </div>
+    <div class="fin-card"><div class="fc-lbl">المرتجعات (${fReturns.length})</div><div class="fc-val" style="color:var(--red)">${returnsAmt.toLocaleString()}<small> ر.س</small></div></div>
     <div class="fin-card"><div class="fc-lbl">تأمين محصّل</div><div class="fc-val" style="color:var(--blue)">${insIncome.toLocaleString()}<small> ر.س</small></div></div>
     <div class="fin-card"><div class="fc-lbl">تأمين مسترد</div><div class="fc-val" style="color:var(--orange)">${insOut.toLocaleString()}<small> ر.س</small></div></div>
   `;
