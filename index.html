@@ -225,11 +225,11 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 @media print{
   body *{visibility:hidden}
   #printArea,#printArea *{visibility:visible}
-  #printArea{position:fixed;inset:0;background:white;overflow:visible;display:block!important;padding:10mm}
-  .inv-wrap{page-break-inside:avoid;margin:0 auto;max-width:190mm}
-  .no-print{display:none!important}
+  #printArea{position:fixed;inset:0;background:white;overflow:visible;display:block!important;padding:0}
+  .inv-wrap{page-break-inside:avoid;page-break-after:auto;margin:0 auto;max-width:190mm}
+  * {-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
-@page{size:A4;margin:10mm}
+@page{size:A4 portrait;margin:10mm}
 
 /* Hijri Calendar */
 .hijri-picker-overlay{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7)}
@@ -291,18 +291,17 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
       <div class="topbar"><div><div class="pg-title">لوحة التحكم</div><div class="pg-sub" id="dashDate"></div></div>
-        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(()=>renderDashboard())" title="تحديث">🔄 تحديث</button></div>
         <div style="display:flex;gap:8px"><button class="btn-sm" onclick="exportExcel()">📥 Excel</button></div>
       </div>
       <div id="delivAlerts"></div>
       <div id="dailySummary"></div>
       <div class="stats-grid" id="statsGrid"></div>
-      <div id="upcomingOrdersSection" style="display:none;margin-bottom:18px">
-        <div class="sec-hdr" style="background:rgba(255,140,0,.1);border-radius:6px;padding:8px 12px;margin-bottom:8px">
-          <div class="sec-ttl" style="color:#FF8C00">⚠️ طلبات تسليمها خلال أسبوع</div>
-          <button class="btn-sm" onclick="switchPage('pgOrders');document.getElementById('orderDeliveryF')&&(document.getElementById('orderDeliveryF').value='week');renderOrders();" style="background:rgba(255,140,0,.2);color:#FF8C00;border-color:rgba(255,140,0,.3)">عرض الكل</button>
+      <div id="upcomingSection" style="display:none;margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,140,0,.1);border-radius:6px;padding:8px 12px;margin-bottom:8px">
+          <span style="color:#FF8C00;font-weight:700;font-size:13px">⚠️ طلبات تسليمها خلال أسبوع</span>
+          <button class="btn-sm" onclick="showUpcomingOrders()" style="background:rgba(255,140,0,.2);color:#FF8C00;border-color:rgba(255,140,0,.4)">عرض الكل</button>
         </div>
-        <div id="upcomingOrdersList"></div>
+        <div id="upcomingList"></div>
       </div>
       <div class="sec-hdr"><div class="sec-ttl">آخر الطلبات</div></div>
       <div class="tw"><div style="overflow-x:auto"><table><thead id="dashTblHead"><tr><th>رقم المحل</th><th>رقم النظام</th><th>العميل</th><th>المنتج</th><th>موعد الاستلام</th><th>الحالة</th></tr></thead><tbody id="dashTbl"></tbody></table></div></div>
@@ -312,8 +311,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <div class="page" id="page-orders">
       <div class="topbar"><div><div class="pg-title">الطلبات</div></div>
         <div style="display:flex;gap:7px;align-items:center">
-          <button class="btn-sm" onclick="fetchAll().then(()=>renderOrders())" title="تحديث البيانات">🔄 تحديث</button>
-          <button class="btn-add" onclick="openOrderModal()" id="btnAddOrder">+ طلب جديد</button>
+          <button class="btn-sm" onclick="fetchAll().then(()=>renderOrders())" style="margin-left:4px">🔄</button> <button class="btn-add" onclick="openOrderModal()" id="btnAddOrder">+ طلب جديد</button>
         </div>
       </div>
 
@@ -381,7 +379,6 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <!-- ATTENDANCE -->
     <div class="page" id="page-attendance">
       <div class="topbar"><div><div class="pg-title">الحضور والانصراف</div></div>
-        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(()=>renderAttendance())" title="تحديث">🔄 تحديث</button></div>
         <button class="btn-sm" id="btnAttRep" onclick="switchPage('attend-report')" style="display:none">📋 تقرير الحضور</button>
       </div>
       <div class="attend-box">
@@ -431,7 +428,6 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <!-- EXPENSES -->
     <div class="page" id="page-expenses">
       <div class="topbar"><div><div class="pg-title">المصروفات</div></div>
-        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(()=>renderExpenses())" title="تحديث">🔄 تحديث</button></div>
         <button class="btn-add" onclick="openExpModal()">+ إضافة مصروف</button>
       </div>
       <div class="tw"><table><thead><tr><th>#</th><th>التاريخ</th><th>البند الرئيسي</th><th>البند الفرعي</th><th>الوصف</th><th>المبلغ</th><th>إجراءات</th></tr></thead><tbody id="expTbl"></tbody></table></div>
@@ -449,7 +445,6 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <div class="page" id="page-reports">
       <div class="topbar">
         <div><div class="pg-title">التقارير المالية</div></div>
-        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(()=>renderReports())" title="تحديث">🔄 تحديث</button></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="date" class="fi" id="repFrom" onchange="renderReports()">
           <span style="color:var(--gr)">إلى</span>
@@ -507,7 +502,6 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
     <!-- DELIVERIES -->
     <div class="page" id="page-deliveries">
       <div class="topbar"><div><div class="pg-title">التسليمات</div><div class="pg-sub">تسجيل التسليمات النهائية</div></div>
-        <div style="display:flex;gap:7px;align-items:center"><button class="btn-sm" onclick="fetchAll().then(()=>renderDeliveries())" title="تحديث">🔄 تحديث</button></div>
         <button class="btn-add" onclick="openDeliveryModal()" id="btnAddDelivery">+ تسليم جديد</button>
       </div>
       <div class="tw">
@@ -570,6 +564,7 @@ const DEF={
   ],
   products:['عروسة','ملكة','سهرة','بشت','أخرى'],
   orderTypes:['تفصيل ملك','تفصيل ايجار','جاهز ملك','جاهز ايجار'],
+  payMethods:['نقدي','شبكة','تحويل','مختلط (نقدي+شبكة)'],
   trackingSteps:[
     {name:'استلام الطلب',subs:[]},
     {name:'عند الخياط',subs:['خياط 1','خياط 2']},
@@ -605,10 +600,10 @@ async function loadSettings(){
     data=res.data;
   }catch(e){
     // fallback without shop_id filter
-    try{const res=await sb.from('settings').select('*');data=res.data;}catch(e2){console.error("err:",e2);}
+    try{const res=await sb.from('settings').select('*');data=res.data;}catch(e2){}
   }
   cfg={...DEF};
-  (data||[]).forEach(r=>{try{cfg[r.key]=r.value;}catch(e){console.error("err:",e);}});
+  (data||[]).forEach(r=>{try{cfg[r.key]=r.value;}catch(e){}});
   // Load editable builtin roles if saved
   // Load individual role page overrides
   Object.keys(BUILTIN_ROLES).forEach(k=>{
@@ -647,7 +642,7 @@ async function fetchAll(){
     safeQuery(sb.from('deliveries').select('*').eq('shop_id',sid).order('date',{ascending:false})),
     safeQuery(sb.from('audit_log').select('*').eq('shop_id',sid).order('created_at',{ascending:false}).limit(120)),
   ]);
-  db.users=(u.data||[]).map(x=>({id:x.id,name:x.name,username:x.username,role:x.role,job:x.job,baseSalary:x.base_salary||0}));
+  db.users=(u.data||[]).map(x=>({id:x.id,name:x.name,username:x.username,password:x.password,role:x.role,job:x.job,baseSalary:x.base_salary||0}));
   db.orders=(o.data||[]).map(x=>({
     id:x.invoice_number,dbId:x.id,localInvoice:x.local_invoice,
     employee:x.employee,client:x.client,phone:x.phone,
@@ -666,13 +661,13 @@ async function fetchAll(){
   db.attendance=(a.data||[]).map(x=>({id:x.id,userId:x.user_id,userName:x.user_name,shift:x.shift,date:x.date,checkin:x.checkin_time,checkout:x.checkout_time,duration:x.duration_minutes}));
   db.salaries=(s.data||[]).map(x=>({id:x.id,empId:x.employee_id,empName:x.employee_name,type:x.type,amount:x.amount||0,baseSalary:x.base_salary||0,month:x.month,date:x.date,notes:x.notes,createdBy:x.created_by}));
   db.returns=(r.data||[]).map(x=>({id:x.id,orderId:x.order_id,invoiceNum:x.invoice_number,client:x.client,type:x.type,amount:x.amount||0,date:x.date,notes:x.notes,createdBy:x.created_by}));
-  db.deliveries=(dlv.data||[]).map(x=>({id:x.id,localInvoice:x.local_invoice,client:x.client,originalAmount:x.original_amount||0,receivedAmount:x.received_amount||0,payMethod:x.pay_method,date:x.date,createdBy:x.created_by,insuranceAmount:x.insurance_amount||0,insuranceStatus:x.insurance_status||'',partials:x.partial_payments||[]}));
+  db.deliveries=(dlv.data||[]).map(x=>({id:x.id,localInvoice:x.local_invoice,client:x.client,originalAmount:x.original_amount||0,receivedAmount:x.received_amount||0,payMethod:x.pay_method,date:x.date,createdBy:x.created_by,insuranceAmount:x.insurance_amount||0,insuranceStatus:x.insurance_status||''}));
   db.audit=(au.data||[]).map(x=>({id:x.id,userName:x.user_name,action:x.action,table:x.table_name,recordId:x.record_id,details:x.details,at:x.created_at}));
   nextInvoice=db.orders.reduce((m,o)=>Math.max(m,o.id||0),99)+1;
 }
 
 async function logAudit(action,table,recId,details){
-  try{await sb.from('audit_log').insert({shop_id:currentShop?.id||1,user_name:currentUser.name,action,table_name:table,record_id:String(recId),details,created_at:new Date().toISOString()});}catch(e){console.error("err:",e);}
+  try{await sb.from('audit_log').insert({shop_id:currentShop?.id||1,user_name:currentUser.name,action,table_name:table,record_id:String(recId),details,created_at:new Date().toISOString()});}catch(e){}
 }
 
 // ===== AUTH =====
@@ -734,7 +729,7 @@ async function doLogin(){
     currentUser={id:data.id,name:data.name,username:data.username,role:data.role,job:data.job,baseSalary:data.base_salary||0};
     // Upgrade plain text password to hash silently
     if(data.password===p){
-      try{await sb.from('users').update({password:hashed}).eq('id',data.id);}catch(e){console.error("err:",e);}
+      try{await sb.from('users').update({password:hashed}).eq('id',data.id);}catch(e){}
     }
     try{
       // MUST init shop first so currentShop is set before loadSettings
@@ -827,16 +822,15 @@ async function initApp(){
   populateFilters();startClock();checkDelivAlerts();updateLogoDisplay();
   // Show my pay info on salaries page for non-managers
   switchPage(pages[0]);
-  // Auto-refresh every 3 minutes (silent, no loading screen)
-  if(window._autoRefreshInterval)clearInterval(window._autoRefreshInterval);
-  window._autoRefreshInterval=setInterval(async()=>{
+  // Auto-refresh every 3 min silent
+  if(window._autoRefresh)clearInterval(window._autoRefresh);
+  window._autoRefresh=setInterval(async()=>{
     await fetchAll();
     const pg=document.querySelector('.page.active')?.id;
     if(pg==='pgOrders')renderOrders();
     else if(pg==='pgDashboard')renderDashboard();
     else if(pg==='pgExpenses')renderExpenses();
-    else if(pg==='pgAttendance')renderAttendance();
-    else if(pg==='pgDeliveries')renderDeliveries();
+    else if(pg==='pgReports')renderReports();
   },3*60*1000);
 }
 
@@ -918,13 +912,6 @@ function hijriToGregorian(hijriStr){
   }catch(e){return'';}
 }
 
-function syncG(hId,gId){
-  const v=document.getElementById(hId)?.value;
-  if(!v)return;
-  const greg=hijriToGregorian(v);
-  const el=document.getElementById(gId);
-  if(el&&greg){el.value=greg;const hel=document.getElementById(hId);if(hel)hel.value=toHijri(greg);}
-}
 function calcDisc(o){if(o.discountType==='amount')return o.discountValue||0;if(o.discountType==='percent')return Math.round((o.amount||0)*(o.discountValue||0)/100);return 0;}
 function calcFinal(o){return(o.amount||0)-calcDisc(o);}
 function calcPaid(o){return(o.deposit||0)+(o.partials||[]).reduce((s,p)=>s+(p.amount||0),0);}
@@ -947,6 +934,12 @@ function checkDelivAlerts(){
 }
 
 // ===== DASHBOARD =====
+
+function showUpcomingOrders(){
+  window._filterUpcoming=true;
+  switchPage('pgOrders');
+  setTimeout(()=>{renderOrders();window._filterUpcoming=false;},100);
+}
 function renderDashboard(){
   const today=new Date().toISOString().split('T')[0];
   const total=db.orders.filter(o=>!o.isDraft).length;
@@ -1007,39 +1000,39 @@ function renderDashboard(){
     const el=document.getElementById('delivAlerts');
     if(el)el.innerHTML+='<div class="a-warn" style="margin-top:7px">🛡️ '+unretInsAlert.length+' طلب تم تسليمه ولم يُسترد تأمينه بعد!</div>';
   }
-  // Upcoming orders (within 7 days)
+  // Upcoming orders widget
   const upcoming=db.orders.filter(o=>{
     if(o.isDraft||!o.deliveryDate)return false;
-    const days=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
-    return days>=0&&days<=7;
+    const d=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
+    return d>=0&&d<=7;
   }).sort((a,b)=>new Date(a.deliveryDate)-new Date(b.deliveryDate));
-  const upSec=document.getElementById('upcomingOrdersSection');
-  const upList=document.getElementById('upcomingOrdersList');
-  if(upSec&&upList){
-    upSec.style.display=upcoming.length?'block':'none';
-    upList.innerHTML=upcoming.map(o=>{
-      const days=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
-      return `<div onclick="openOrderActions(${o.id})" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,140,0,.07);border-radius:4px;margin-bottom:5px;border-right:3px solid #FF8C00;cursor:pointer">
-        <div style="display:flex;align-items:center;gap:8px">
-          <strong style="color:var(--gold)">#${o.id}</strong>
-          <span>${o.client}</span>
-          <span class="badge ${days===0?'b-red':days<=3?'b-amber':'b-blue'}">${days===0?'⚠️ اليوم':days===1?'⚠️ غداً':'⏳ '+days+' أيام'}</span>
-        </div>
-        <div style="font-size:11px;color:var(--gr)">${o.deliveryDate}</div>
-      </div>`;
-    }).join('');
+  const upSec=document.getElementById('upcomingSection');
+  const upList=document.getElementById('upcomingList');
+  if(upSec){
+    upSec.style.display='block';
+    if(!upcoming.length){
+      upList.innerHTML='<div style="padding:10px 12px;color:var(--gr);font-size:12px">✅ لا توجد طلبات تسليمها خلال الأسبوع القادم</div>';
+    } else {
+      upList.innerHTML=upcoming.map(o=>{
+        const d=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
+        const badge=d===0?'<span class="badge b-red">⚠️ اليوم</span>':d===1?'<span class="badge b-amber">⚠️ غداً</span>':`<span class="badge b-blue">⏳ ${d} أيام</span>`;
+        return `<div onclick="openOrderActions(${o.id})" style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:rgba(255,140,0,.07);border-radius:4px;margin-bottom:4px;border-right:3px solid #FF8C00;cursor:pointer">
+          <div style="display:flex;align-items:center;gap:8px"><strong style="color:var(--gold)">#${o.id}</strong><span>${o.client}</span>${badge}</div>
+          <span style="font-size:11px;color:var(--gr)">${o.deliveryDate}</span>
+        </div>`;
+      }).join('');
+    }
   }
 }
 
 // ===== ORDERS =====
 function getOrderRowStyle(o){
   if(o.deliveryDate){
-    const daysLeft=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
-    if(daysLeft>=0&&daysLeft<=7)return 'background:rgba(255,140,0,.13)';
+    const d=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
+    if(d>=0&&d<=7)return 'background:rgba(255,140,0,.15)';
   }
   const step=(cfg.trackingSteps||[]).find(s=>s.name===o.status);
-  const color=step?.color||'';
-  if(color)return 'background:'+color+'22';
+  if(step?.color)return 'background:'+step.color+'33';
   if(o.returned)return 'opacity:.55';
   return '';
 }
@@ -1056,30 +1049,25 @@ function renderOrders(){
   const draftF=document.getElementById('orderDraftF')?.value||'';
   const canAdd=currentUser.role==='manager'||currentUser.role==='staff'||canDo('canAddOrder');
   document.getElementById('btnAddOrder').style.display=canAdd?'inline-flex':'none';
-  // If called from dashboard upcoming section, filter to next 7 days only
+  // Upcoming filter from dashboard
   if(window._filterUpcoming){
-    const upcomingIds=new Set(db.orders.filter(o=>{
+    window._filterUpcoming=false;
+    const upList2=db.orders.filter(o=>{
       if(o.isDraft||!o.deliveryDate)return false;
       const d=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
       return d>=0&&d<=7;
-    }).map(o=>o.id));
-    window._filterUpcoming=false;
-    // Highlight in order search or just show them
-    const list2=db.orders.filter(o=>upcomingIds.has(o.id)).sort((a,b)=>new Date(a.deliveryDate)-new Date(b.deliveryDate));
-    const tbody=document.getElementById('ordersTbl');
-    if(tbody){
-      const canAmt=currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts');
-      tbody.innerHTML=list2.map(o=>{
-        const daysLeft=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
-        const badge=daysLeft===0?'<span class="badge b-red">اليوم</span>':daysLeft===1?'<span class="badge b-amber">غداً</span>':`<span class="badge b-blue">${daysLeft} أيام</span>`;
-        return `<tr style="${getOrderRowStyle(o)}">
-          <td colspan="2"><strong style="color:var(--gold)">#${o.id}</strong> ${badge}</td>
-          <td>${o.client}</td>
-          <td>${o.deliveryDate||'-'}</td>
-          <td>${o.status||'-'}</td>
-          <td><button class="btn-sm" onclick="openOrderActions(${o.id})">إجراءات</button></td>
-        </tr>`;
-      }).join('')||'<tr><td colspan="6" style="text-align:center;padding:22px;color:var(--gr)">لا توجد طلبات قريبة</td></tr>';
+    }).sort((a,b)=>new Date(a.deliveryDate)-new Date(b.deliveryDate));
+    const tb=document.getElementById('ordersTbl');
+    if(tb){
+      if(!upList2.length){
+        tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:22px;color:var(--gr)">✅ لا توجد طلبات تسليمها خلال الأسبوع القادم</td></tr>';
+      } else {
+        tb.innerHTML=upList2.map(o=>{
+          const d=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
+          const badge=d===0?'<span class="badge b-red">اليوم</span>':d===1?'<span class="badge b-amber">غداً</span>':`<span class="badge b-blue">${d} أيام</span>`;
+          return `<tr style="${getOrderRowStyle(o)}"><td colspan="2"><strong>#${o.id}</strong> ${badge}</td><td>${o.client}</td><td>${o.deliveryDate}</td><td>${o.status||'-'}</td><td colspan="5"><button class="btn-sm" onclick="openOrderActions(${o.id})">إجراءات ←</button></td></tr>`;
+        }).join('');
+      }
     }
     return;
   }
@@ -1295,16 +1283,6 @@ function getOrderExtraItems(){
   return getProductsList();
 }
 
-function syncH(gId,hId){
-  const v=document.getElementById(gId)?.value;
-  const el=document.getElementById(hId);
-  if(el&&v){
-    // Convert gregorian to hijri date value
-    // Since input type=date stores ISO (gregorian), we convert display
-    // Use a hidden approach: store gregorian value but show hijri label
-    el.value=v; // same value, browser handles locale display
-  }
-}
 function checkRental(){const t=document.getElementById('fType')?.value||'';const r=t.includes('ايجار');const row=document.getElementById('insRow');if(row)row.style.display=r?'block':'none';}
 function calcDiscPreview(){
   const amt=parseFloat(document.getElementById('fAmt')?.value)||0;
@@ -1333,7 +1311,7 @@ async function saveNewOrder(isDraft=false){
     order_date:document.getElementById('fODate').value||null,delivery_date:document.getElementById('fDDate').value||null,
     amount:parseFloat(document.getElementById('fAmt').value)||0,
     deposit:parseFloat(document.getElementById('fDep').value)||0,
-    pay_method:document.getElementById('fDepMeth')?.value==='__split__'?'مختلط':(document.getElementById('fDepMeth')?.value||'نقدي'),
+    pay_method:(document.getElementById('fDepMeth')?.value==='__split__'||document.getElementById('fDepMeth')?.value==='مختلط (نقدي+شبكة)')?'مختلط':(document.getElementById('fDepMeth')?.value||'نقدي'),
     transfer_to:['تحويل','تحويل كامل','تحويل جزئي'].includes(document.getElementById('fDepMeth')?.value)?(document.getElementById('fDepTransferTo')?.value||''):'',
 
     deposit_split:{cash:parseFloat(document.getElementById('fDepCash')?.value)||0,card:parseFloat(document.getElementById('fDepCard')?.value)||0},
@@ -1444,7 +1422,7 @@ async function addPartial(oid){
   const o=db.orders.find(x=>x.id===oid);
   const transferTo=document.getElementById('pTransferTo')?.value||'';
   let payDetail={amount:amt,date:document.getElementById('pDate').value,method,transferTo:(method==='تحويل'||method==='تحويل كامل'||method==='تحويل جزئي')?transferTo:''};
-  if(method==='__split__'){
+  if(method==='__split__'||method==='مختلط (نقدي+شبكة)'){
     const cash=parseFloat(document.getElementById('pCash').value)||0;
     const card=parseFloat(document.getElementById('pCard').value)||0;
     payDetail.method='مختلط';
@@ -1454,18 +1432,7 @@ async function addPartial(oid){
   }
   const ps=[...(o.partials||[]),payDetail];
   showLoading('جاري الحفظ...');
-  const{error:updErr}=await sb.from('orders').update({partial_payments:ps}).eq('id',o.dbId);
-  if(updErr){hideLoading();showToast('خطأ في الحفظ: '+updErr.message,'error');return;}
-  // Record partial payment as income
-  if(payDetail.amount>0){
-    await sb.from('expenses').insert({
-      shop_id:currentShop?.id||1,
-      date:payDetail.date||new Date().toISOString().split('T')[0],
-      cat_main:'إيرادات',cat_sub:'دفعة جزئية',
-      description:`دفعة طلب #${oid} - ${o.client||''}`,
-      amount:-payDetail.amount,
-    });
-  }
+  await sb.from('orders').update({partial_payments:ps}).eq('id',o.dbId);
   await logAudit('دفعة جديدة','orders',oid,`${payDetail.amount.toLocaleString()} ر.س - ${payDetail.method}`);
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('تمت الدفعة ✓','success');
 }
@@ -1643,7 +1610,7 @@ function showQR(oid){
 
 function printQR(oid){
   const o=db.orders.find(x=>x.id===oid);
-  const pa=document.getElementById('printArea');pa.style.display='flex';pa.style.flexDirection='column';pa.style.alignItems='center';
+  const pa=document.getElementById('printArea');pa.style.display='block';
   pa.innerHTML=`<div style="text-align:center;font-family:Tajawal,sans-serif;padding:12px;max-width:250px;background:white;color:#111">
     <div style="font-size:15px;font-weight:900">${cfg.shopName||currentShop?.name||'نظام الإدارة'}</div>
     <div style="font-size:22px;font-weight:900;margin:5px 0">#${o.id}</div>
@@ -1696,10 +1663,10 @@ function printInvoice(oid){
   const canSeePrice=currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewInvoiceAmount');
   if(!canSeePrice){showToast('ليس لديك صلاحية طباعة الفاتورة بالمبلغ','error');return;}
   const pa=document.getElementById('printArea');
-  pa.style.display='flex';pa.style.flexDirection='column';pa.style.alignItems='center';
+  pa.style.display='block';
   pa.innerHTML=buildInv(o,'نسخة العميل','#2980B9');
   setTimeout(()=>{
-    try{JsBarcode('#ibc-نسخة-العميل',String(oid).padStart(6,'0'),{format:'CODE128',width:1.9,height:40,displayValue:true,text:`#${oid}`,fontSize:10,margin:5,background:'#ffffff',lineColor:'#000000'});}catch(e){console.error("err:",e);}
+    try{JsBarcode('#ibc-نسخة-العميل',String(oid).padStart(6,'0'),{format:'CODE128',width:1.9,height:40,displayValue:true,text:`#${oid}`,fontSize:10,margin:5,background:'#ffffff',lineColor:'#000000'});}catch(e){}
     setTimeout(()=>{window.print();pa.style.display='none';pa.style.flexDirection='';pa.style.alignItems='';},600);
   },200);
 }
@@ -1707,33 +1674,32 @@ function printInvoice(oid){
 function printPayInvoice(oid){
   const o=db.orders.find(x=>x.id===oid);if(!o)return;
   const rem=calcRem(o);const paid=calcPaid(o);const total=calcFinal(o);
-  // Build payments list: deposit + partials
   const payments=[];
   if(o.deposit>0)payments.push({date:o.orderDate||'',method:o.payMethod||'نقدي',amount:o.deposit,label:'عربون'});
   (o.partials||[]).forEach((p,i)=>payments.push({date:p.date||'',method:p.method||'',amount:p.amount||0,label:`دفعة ${i+1}`}));
-  const payRows=payments.map(p=>`
-    <div class="inv-row">
-      <span>${p.label} — ${p.method}${p.date?' ('+p.date+')':''}</span>
-      <span style="color:var(--green,#27ae60)">${p.amount.toLocaleString()} ر.س</span>
-    </div>`).join('');
-  const pa=document.getElementById('printArea');pa.style.display='block';pa.style.padding='0';
-  pa.innerHTML=`<div class="inv-wrap" style="max-width:190mm;margin:0 auto;padding:10mm;font-family:Tajawal,sans-serif;color:#222">
-    <div style="text-align:center;font-size:20px;font-weight:900;color:#C9A84C;margin-bottom:4px">${cfg.shopName||currentShop?.name||'نظام الإدارة'}</div>
-    <div style="text-align:center;font-size:12px;color:#777;margin-bottom:12px">${cfg.shopPhone||''}</div>
-    <hr style="border-color:#C9A84C;margin:8px 0">
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>رقم الفاتورة</span><strong>#${o.id}</strong></div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>التاريخ</span><span>${new Date().toLocaleDateString('ar-SA')}</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><strong>العميلة</strong><strong>${o.client}</strong></div>
-    <hr style="border-color:#eee;margin:8px 0">
-    <div style="font-weight:700;color:#C9A84C;margin-bottom:6px">تفاصيل المدفوعات:</div>
-    ${payRows||'<div style="color:#aaa;font-size:12px">لا توجد دفعات مسجلة</div>'}
-    <hr style="border-color:#eee;margin:8px 0">
-    <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;margin:6px 0"><span>إجمالي الفاتورة</span><span>${total.toLocaleString()} ر.س</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:14px;color:#27ae60;font-weight:700;margin:4px 0"><span>✅ المجموع المدفوع</span><span>${paid.toLocaleString()} ر.س</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:15px;color:${rem>0?'#e74c3c':'#27ae60'};font-weight:900;margin:6px 0;padding:8px;background:${rem>0?'#fef9f9':'#f0fff4'};border-radius:6px"><span>${rem>0?'⚠️ المتبقي':'✅ مكتمل الدفع'}</span><span>${rem>0?rem.toLocaleString()+' ر.س':'0 ر.س'}</span></div>
-    <hr style="border-color:#C9A84C;margin:10px 0">
-    <div style="text-align:center;font-size:11px;color:#aaa">${cfg.invoiceNote||'شكراً لثقتكم'}</div>
-    <div style="text-align:center;font-size:9px;color:#ccc;margin-top:4px">تم الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>
+  const payRows=payments.map(p=>`<tr><td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${p.label}</td><td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;color:#666">${p.method}${p.date?' · '+p.date:''}</td><td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:left;color:#27ae60;font-weight:700">${p.amount.toLocaleString()} ر.س</td></tr>`).join('');
+  const pa=document.getElementById('printArea');pa.style.display='block';
+  pa.innerHTML=`<div style="font-family:Tajawal,sans-serif;direction:rtl;padding:15mm;max-width:190mm;margin:0 auto;background:white;color:#222">
+    ${cfg.shopLogo?`<div style="text-align:center;margin-bottom:8px"><img src="${cfg.shopLogo}" style="height:56px;object-fit:contain"></div>`:''}
+    <div style="text-align:center;font-size:19px;font-weight:900;color:#C9A84C">${cfg.shopName||currentShop?.name||'نظام الإدارة'}</div>
+    <div style="text-align:center;font-size:11px;color:#999;margin-bottom:12px">${cfg.shopPhone||''}</div>
+    <hr style="border:none;border-top:2px solid #C9A84C;margin:8px 0">
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>رقم الطلب</span><strong>#${o.id}</strong></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>العميلة</span><strong>${o.client}</strong></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>تاريخ الطباعة</span><span>${new Date().toLocaleDateString('ar-SA')}</span></div>
+    <hr style="border:none;border-top:1px solid #eee;margin:8px 0">
+    <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:#C9A84C">سجل الدفعات</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#f8f6f0"><th style="padding:6px 8px;text-align:right">البيان</th><th style="padding:6px 8px;text-align:right">الطريقة / التاريخ</th><th style="padding:6px 8px;text-align:left">المبلغ</th></tr></thead>
+      <tbody>${payRows||'<tr><td colspan="3" style="padding:10px;color:#aaa;text-align:center">لا توجد دفعات</td></tr>'}</tbody>
+    </table>
+    <hr style="border:none;border-top:1px solid #eee;margin:8px 0">
+    <div style="display:flex;justify-content:space-between;font-size:14px;margin:4px 0"><span>إجمالي الفاتورة</span><strong>${total.toLocaleString()} ر.س</strong></div>
+    <div style="display:flex;justify-content:space-between;font-size:14px;color:#27ae60;font-weight:700;margin:4px 0"><span>✅ المدفوع</span><span>${paid.toLocaleString()} ر.س</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:900;padding:8px;border-radius:6px;margin-top:6px;background:${rem>0?'#fff5f5':'#f0fff4'};color:${rem>0?'#e74c3c':'#27ae60'}">
+      <span>${rem>0?'⚠️ المتبقي':'✅ مكتمل الدفع'}</span><span>${rem>0?rem.toLocaleString()+' ر.س':'0 ر.س'}</span>
+    </div>
+    <div style="text-align:center;font-size:10px;color:#aaa;margin-top:12px">${cfg.invoiceNote||'شكراً لثقتكم'}</div>
   </div>`;
   setTimeout(()=>{window.print();pa.style.display='none';},300);
 }
@@ -1844,7 +1810,7 @@ async function renderAttRep(){
 
 function printAttRep(){
   const tbl=document.getElementById('arTbl');const stats=document.getElementById('arStats');
-  const pa=document.getElementById('printArea');pa.style.display='flex';pa.style.flexDirection='column';pa.style.alignItems='center';
+  const pa=document.getElementById('printArea');pa.style.display='block';
   pa.innerHTML=`<div style="font-family:Tajawal,sans-serif;direction:rtl;padding:16px;width:100%;max-width:700px;background:white;color:#111">
     <h2 style="text-align:center;margin-bottom:12px">${cfg.shopName||currentShop?.name||'نظام الإدارة'} - تقرير الحضور</h2>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -1853,7 +1819,7 @@ function printAttRep(){
     </table>
     <p style="text-align:center;margin-top:12px;font-size:10px;color:#888">تم الطباعة: ${new Date().toLocaleDateString('ar-SA')}</p>
   </div>`;
-  setTimeout(()=>{window.print();pa.style.display='none';pa.style.flexDirection='';pa.style.alignItems='';},300);
+  setTimeout(()=>{window.print();pa.style.display='none';},300);
 }
 
 // ===== SALARIES =====
@@ -2087,10 +2053,8 @@ async function saveExpense(){
 
 async function deleteExpense(id){
   if(!confirm('حذف هذا المصروف؟'))return;
-  showLoading('...');
-  const{error}=await sb.from('expenses').delete().eq('id',id);
-  if(error){hideLoading();showToast('خطأ في الحذف: '+error.message,'error');return;}
-  await fetchAll();hideLoading();renderExpenses();renderReports();showToast('تم الحذف','error');
+  showLoading('...');await sb.from('expenses').delete().eq('id',id);
+  await fetchAll();hideLoading();renderExpenses();showToast('تم الحذف','error');
 }
 
 // ===== RETURNS =====
@@ -2233,7 +2197,7 @@ async function saveReturn(){
 
 function printReturnInvoice(o,amt,date,items,type){
   const pa=document.getElementById('printArea');
-  pa.style.display='flex';pa.style.flexDirection='column';pa.style.alignItems='center';
+  pa.style.display='block';
   pa.innerHTML=`<div class="inv-wrap">
     <div class="inv-copy" style="border-color:#C0392B;color:#C0392B">فاتورة مرتجع</div>
     <div class="inv-brand">${cfg.shopName||currentShop?.name||'نظام الإدارة'}</div>
@@ -2252,7 +2216,7 @@ function printReturnInvoice(o,amt,date,items,type){
     <div class="inv-footer">تم الاسترداد بتاريخ ${date} · ${cfg.invoiceNote||''}</div>
   </div>`;
   setTimeout(()=>{
-    try{JsBarcode('#ret-bc',String(o.id).padStart(6,'0'),{format:'CODE128',width:1.9,height:38,displayValue:true,text:`#${o.id}`,fontSize:10,margin:5,background:'#ffffff',lineColor:'#000000'});}catch(e){console.error("err:",e);}
+    try{JsBarcode('#ret-bc',String(o.id).padStart(6,'0'),{format:'CODE128',width:1.9,height:38,displayValue:true,text:`#${o.id}`,fontSize:10,margin:5,background:'#ffffff',lineColor:'#000000'});}catch(e){}
     setTimeout(()=>{window.print();pa.style.display='none';pa.style.flexDirection='';pa.style.alignItems='';},600);
   },200);
 }
@@ -2270,15 +2234,17 @@ function renderReports(){
   const expenses=fExp.filter(e=>(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
   const uncollected=fOrders.reduce((s,o)=>s+Math.max(0,calcRem(o)),0);
   const returnsAmt=fReturns.reduce((s,r)=>s+(r.amount||0),0);
-  const netCollected=collected-returnsAmt;
+  // Deliveries revenue (independent deliveries not linked to orders)
+  const delivRevenue=fDeliveries.reduce((s,d)=>s+(d.receivedAmount||0),0);
+  const delivCount=fDeliveries.length;
+  const netCollected=collected+delivRevenue-returnsAmt;
   const profit=netCollected-expenses;
   const insIncome=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)<0).reduce((s,e)=>s+Math.abs(e.amount||0),0);
   const insOut=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
   document.getElementById('finGrid').innerHTML=`
-    <div class="fin-card"><div class="fc-lbl">عدد الطلبات</div><div class="fc-val" style="color:var(--blue)">${fOrders.length}</div></div>
-    <div class="fin-card"><div class="fc-lbl">المبيعات</div><div class="fc-val" style="color:var(--gold)">${sales.toLocaleString()}<small> ر.س</small></div></div>
-    <div class="fin-card"><div class="fc-lbl">المحصّل</div><div class="fc-val" style="color:var(--green)">${collected.toLocaleString()}<small> ر.س</small></div></div>
-    <div class="fin-card"><div class="fc-lbl">غير محصل</div><div class="fc-val" style="color:var(--orange)">${uncollected.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card"><div class="fc-lbl">المبيعات</div><div class="fc-val" style="color:var(--gold)">${sales.toLocaleString()}<small> ر.س</small></div><div class="fc-sub">${fOrders.length} طلب · غير محصل: ${uncollected.toLocaleString()} ر.س</div></div>
+    <div class="fin-card"><div class="fc-lbl">التسليمات <small style="color:var(--gr);font-size:10px">القديم</small></div><div class="fc-val" style="color:var(--blue)">${delivRevenue.toLocaleString()}<small> ر.س</small></div><div class="fc-sub">${delivCount} تسليم</div></div>
+    <div class="fin-card"><div class="fc-lbl">صافي الإيرادات</div><div class="fc-val" style="color:var(--green)">${netCollected.toLocaleString()}<small> ر.س</small></div></div>
     <div class="fin-card"><div class="fc-lbl">المصروفات</div><div class="fc-val" style="color:var(--red)">${expenses.toLocaleString()}<small> ر.س</small></div></div>
     <div class="fin-card"><div class="fc-lbl">المرتجعات (${fReturns.length})</div><div class="fc-val" style="color:var(--red)">-${returnsAmt.toLocaleString()}<small> ر.س</small></div></div>
     <div class="fin-card"><div class="fc-lbl">صافي الإيرادات</div><div class="fc-val" style="color:var(--gold)">${netCollected.toLocaleString()}<small> ر.س</small></div></div>
@@ -2295,13 +2261,13 @@ function renderReports(){
   const discounted=fOrders.filter(o=>o.discountType&&o.discountType!=='none'&&o.discountValue>0);
   const totalDiscount=discounted.reduce((s,o)=>s+calcDisc(o),0);
   const osg=document.getElementById('orderStatsGrid');
-  if(osg)osg.innerHTML=`
-    <div class="stat-card sc-blue"><div class="s-lbl">قيد التنفيذ</div><div class="s-val">${inProgress}</div><div class="s-icon">⏳</div></div>
-    <div class="stat-card sc-green"><div class="s-lbl">تسليم بالطلبات</div><div class="s-val">${delivInOrders}</div><div class="s-sub">${fDeliveries.length} تسليم مستقل</div><div class="s-icon">📦</div></div>
-    <div class="stat-card sc-orange"><div class="s-lbl">تأمين غير مسترد</div><div class="s-val">${insNotRet.length}</div><div class="s-sub">${insNotRet.reduce((s,o)=>s+(o.insurance||0),0).toLocaleString()} ر.س</div><div class="s-icon">🛡️</div></div>
-    <div class="stat-card sc-green"><div class="s-lbl">تأمين مسترد</div><div class="s-val">${insRet.length}</div><div class="s-sub">${insRet.reduce((s,o)=>s+(o.insurance||0),0).toLocaleString()} ر.س</div><div class="s-icon">✅</div></div>
-    <div class="stat-card sc-red"><div class="s-lbl">لم تُحصَّل كاملاً</div><div class="s-val">${notFullyPaid.length}</div><div class="s-sub">${notFullyPaid.reduce((s,o)=>s+calcRem(o),0).toLocaleString()} ر.س</div><div class="s-icon">💰</div></div>
-    <div class="stat-card sc-gold"><div class="s-lbl">طلبات بخصم</div><div class="s-val">${discounted.length}</div><div class="s-sub">إجمالي: ${totalDiscount.toLocaleString()} ر.س</div><div class="s-icon">🏷️</div></div>
+  // Build status counts from ALL tracking steps
+  const statusColors=['sc-blue','sc-green','sc-gold','sc-orange','sc-red'];
+  const statusCards=(cfg.trackingSteps||[]).map((step,si)=>{
+    const cnt=fOrders.filter(o=>o.status===step.name).length;
+    return `<div class="stat-card ${statusColors[si%statusColors.length]}" style="${step.color?'border-right:3px solid '+step.color:''}"><div class="s-lbl">${step.name}</div><div class="s-val">${cnt}</div><div class="s-icon">📋</div></div>`;
+  }).join('');
+  if(osg)osg.innerHTML=statusCards+`
     <div class="stat-card sc-red"><div class="s-lbl">المرتجعات</div><div class="s-val">${fReturns.length}</div><div class="s-sub">${returnsAmt.toLocaleString()} ر.س</div><div class="s-icon">↩️</div></div>
     <div class="stat-card sc-blue"><div class="s-lbl">المسودات</div><div class="s-val">${db.orders.filter(o=>o.isDraft).length}</div><div class="s-icon">📋</div></div>
   `;
@@ -2368,7 +2334,7 @@ function renderReports(){
   const mt=document.getElementById('monthTbl');if(mt)mt.innerHTML=months.map((m,i)=>{const mo=db.orders.filter(o=>!o.isDraft&&o.orderDate&&new Date(o.orderDate).getMonth()===i);const me=db.expenses.filter(e=>new Date(e.date).getMonth()===i&&(e.amount||0)>0);const mr=db.returns.filter(r=>new Date(r.date).getMonth()===i);const ms=mo.reduce((s,o)=>s+calcFinal(o),0);const mc=mo.reduce((s,o)=>s+calcPaid(o),0);const mx=me.reduce((s,e)=>s+(e.amount||0),0);const mret=mr.reduce((s,r)=>s+(r.amount||0),0);const mnet=mc-mret;if(!ms&&!mx&&!mret)return'';return`<tr><td style="font-weight:700">${m}</td><td style="color:var(--gold)">${ms.toLocaleString()}</td><td style="color:var(--green)">${mc.toLocaleString()}</td><td style="color:var(--red)">${mret>0?'- '+mret.toLocaleString():'-'}</td><td style="color:var(--blue)">${mx.toLocaleString()}</td><td style="color:${mnet-mx>=0?'var(--gold)':' var(--red)'};font-weight:700">${(mnet-mx).toLocaleString()}</td><td>${mo.length}</td></tr>`;}).join('');
 }
 function printReports(){
-  const pa=document.getElementById('printArea');pa.style.display='flex';pa.style.flexDirection='column';pa.style.alignItems='center';
+  const pa=document.getElementById('printArea');pa.style.display='block';
   pa.innerHTML=`<div style="font-family:Tajawal,sans-serif;direction:rtl;padding:16px;width:100%;max-width:700px;background:white;color:#111">
     <h2 style="text-align:center;margin-bottom:14px">${cfg.shopName||currentShop?.name||'نظام الإدارة'} - التقرير المالي</h2>
     <p style="text-align:center;color:#888;margin-bottom:14px">${document.getElementById('repFrom').value} إلى ${document.getElementById('repTo').value}</p>
@@ -2377,7 +2343,7 @@ function printReports(){
     ${document.getElementById('monthTbl').closest('table').outerHTML}
     <p style="text-align:center;margin-top:14px;font-size:10px;color:#888">تم الطباعة: ${new Date().toLocaleDateString('ar-SA')}</p>
   </div>`;
-  setTimeout(()=>{window.print();pa.style.display='none';pa.style.flexDirection='';pa.style.alignItems='';},300);
+  setTimeout(()=>{window.print();pa.style.display='none';},300);
 }
 
 // ===== EMPLOYEES =====
@@ -2539,7 +2505,7 @@ function renderSettings(){
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
             <span style="color:var(--gr);font-size:16px;cursor:grab">⋮⋮</span>
             <input type="text" value="${step.name}" id="tsSN${si}" style="flex:1;background:var(--d4);border:1px solid rgba(201,168,76,.2);border-radius:2px;padding:5px 8px;color:var(--white);font-family:Tajawal,sans-serif;font-size:12px;outline:none">
-            <input type="color" value="${step.color||'#C9A84C'}" title="لون المرحلة" onchange="updateTrackStepColor(${si},this.value)" style="width:28px;height:28px;padding:2px;border:none;border-radius:4px;cursor:pointer;background:none">
+            <input type="color" value="${step.color||'#444444'}" title="لون المرحلة" onchange="updateTrackStepColor(${si},this.value)" style="width:28px;height:28px;padding:2px;border:none;border-radius:4px;cursor:pointer;background:transparent">
             <button class="tag-del" onclick="removeTrackStep(${si})">✕</button>
           </div>
           <div class="tag-list">${(step.subs||[]).map((s,subi)=>`<span class="tag">${s}<button class="tag-del" onclick="removeTrackSub(${si},${subi})">✕</button></span>`).join('')}</div>
@@ -2652,8 +2618,8 @@ function updateTrackStepColor(i,color){
   saveSetting('trackingSteps',cfg.trackingSteps);
   renderOrders();
 }
-function addTrackSub(si){const v=document.getElementById(`tsSub${si}`)?.value.trim();if(!v)return;cfg.trackingSteps[si].subs.push(v);saveSetting('trackingSteps',cfg.trackingSteps);renderSettings();}
-function removeTrackSub(si,subi){cfg.trackingSteps[si].subs.splice(subi,1);saveSetting('trackingSteps',cfg.trackingSteps);renderSettings();}
+function addTrackSub(si){const v=document.getElementById(`tsSub${si}`)?.value.trim();if(!v)return;cfg.trackingSteps[si].subs.push(v);renderSettings();}
+function removeTrackSub(si,subi){cfg.trackingSteps[si].subs.splice(subi,1);renderSettings();}
 function addExpCat(){const v=document.getElementById('newExpCat')?.value.trim();if(!v)return;cfg.expCats.push({name:v,subs:[]});saveSetting('expCats',cfg.expCats);renderSettings();}
 function removeExpCat(i){cfg.expCats.splice(i,1);saveSetting('expCats',cfg.expCats);renderSettings();}
 function addExpSub(ci){const v=document.getElementById(`eSubInp${ci}`)?.value.trim();if(!v)return;cfg.expCats[ci].subs.push(v);saveSetting('expCats',cfg.expCats);renderSettings();}
@@ -2974,7 +2940,7 @@ function printMeasurements(orderId){
   const eiRows=ei.map(item=>`
     <tr><td style="border:1px solid #ddd;padding:6px 9px">${item.name}</td>
     <td style="border:1px solid #ddd;padding:6px 9px;text-align:center">${(item.price||0).toLocaleString()} ر.س</td></tr>`).join('');
-  pa.innerHTML=`<div style="font-family:Tajawal,sans-serif;direction:rtl;padding:28px 32px;width:210mm;min-height:297mm;background:white;color:#111;box-sizing:border-box">
+  pa.innerHTML=`<div style="font-family:Tajawal,sans-serif;direction:rtl;padding:15mm;width:190mm;background:white;color:#111;box-sizing:border-box;margin:0 auto">
     ${cfg.shopLogo?`<div style="text-align:center;margin-bottom:10px"><img src="${cfg.shopLogo}" style="height:64px;object-fit:contain"></div>`:''}
     <div style="text-align:center;font-size:18px;font-weight:900;margin-bottom:4px">${cfg.shopName||currentShop?.name||'نظام الإدارة'}</div>
     <div style="text-align:center;font-size:11px;color:#666;margin-bottom:12px">ورقة المقاسات</div>
@@ -3228,7 +3194,16 @@ function hijriToGreg(hy,hm,hd){
 }
 
 // Updated syncH - gregorian date → hijri display
+function syncH(gId,hId){
+  const v=document.getElementById(gId)?.value;
+  const el=document.getElementById(hId);
+  if(el&&v)el.value=toHijri(v);
+}
+
 // Updated syncG - not needed anymore, hijri picker handles conversion
+function syncG(hId,gId){}
+
+
 function editBuiltinRole(roleKey, roleLabel){
   if(roleKey==='manager'){showToast('صلاحية المدير ثابتة ولا يمكن تعديلها','error');return;}
   const allPages=Object.keys(PAGE_NAMES);
@@ -3411,7 +3386,7 @@ async function saveEditDelivery(delId){
 function printDeliveryInvoice(delId){
   const d=db.deliveries.find(x=>x.id===delId);if(!d)return;
   const pa=document.getElementById('printArea');
-  pa.style.display='flex';pa.style.flexDirection='column';pa.style.alignItems='center';
+  pa.style.display='block';
   pa.innerHTML=`<div class="inv-wrap">
     <div class="inv-copy" style="border-color:#27AE60;color:#27AE60">فاتورة تسليم</div>
     <div class="inv-brand">${cfg.shopName||currentShop?.name||'نظام الإدارة'}</div>
@@ -3427,7 +3402,7 @@ function printDeliveryInvoice(delId){
     <hr class="inv-hr-d">
     <div class="inv-footer">تم الاستلام بتاريخ ${d.date} · ${cfg.invoiceNote||''}</div>
   </div>`;
-  setTimeout(()=>{window.print();pa.style.display='none';pa.style.flexDirection='';pa.style.alignItems='';},300);
+  setTimeout(()=>{window.print();pa.style.display='none';},300);
 }
 
 
@@ -3523,7 +3498,7 @@ function toggleTransferRow(val, rowId){
 }
 function toggleSplitPayment(val){
   const row=document.getElementById('splitPayRow');
-  if(row)row.style.display=val==='__split__'?'block':'none';
+  if(row)row.style.display=(val==='__split__'||val==='مختلط (نقدي+شبكة)')?'block':'none';
   const tRow=document.getElementById('pTransferRow');
   const tType=document.getElementById('pTransferType');
   const isTransfer=val==='تحويل'||val==='حوالة'||val?.includes('تحويل');
@@ -3563,7 +3538,7 @@ async function confirmDraft(orderId){
 
 function toggleDepSplit(val){
   const row=document.getElementById('depSplitRow');
-  if(row)row.style.display=val==='__split__'?'grid':'none';
+  if(row)row.style.display=(val==='__split__'||val==='مختلط (نقدي+شبكة)')?'grid':'none';
 }
 function calcDepSplit(){
   const cash=parseFloat(document.getElementById('fDepCash')?.value)||0;
@@ -4018,7 +3993,7 @@ function openDeliveryActions(delId){
         </div>
         <div id="daPaySection">
           <div class="fg"><label>طريقة الدفع</label>
-            <select id="daPayMeth" onchange="toggleDaTransfer(this.value);toggleDaSplit(this.value)">${getPayOpts()}<option value="__split__">مختلط (نقدي+شبكة)</option></select>
+            <select id="daPayMeth" onchange="toggleDaTransfer(this.value);toggleDaSplit(this.value)">${getPayOpts()}</select>
           </div>
           <div id="daTransferNote" style="display:none">
             <div class="fg"><label>📋 المحوَّل إليه</label><input type="text" id="daTransferTo" placeholder="اسم المستلم"></div>
@@ -4057,7 +4032,7 @@ function toggleDeliveryActionType(val){
   document.getElementById('daDiscSection').style.display=val==='discount'?'block':'none';
 }
 function toggleDaSplit(val){
-  document.getElementById('daSplitRow').style.display=val==='__split__'?'block':'none';
+  document.getElementById('daSplitRow').style.display=(val==='__split__'||val==='مختلط (نقدي+شبكة)')?'block':'none';
 }
 function calcDaSplit(){
   const cash=parseFloat(document.getElementById('daCash')?.value)||0;
@@ -4084,8 +4059,8 @@ async function saveDeliveryAction(delId){
     const amt=parseFloat(document.getElementById('daAmt').value)||0;
     const cash=parseFloat(document.getElementById('daCash')?.value)||0;
     const card=parseFloat(document.getElementById('daCard')?.value)||0;
-    const finalAmt=meth==='__split__'?cash+card:amt;
-    const partials=[...(d.partials||[]),{amount:finalAmt,method:meth==='__split__'?'مختلط':meth,cash:meth==='__split__'?cash:0,card:meth==='__split__'?card:0,date,type}];
+    const finalAmt=(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?cash+card:amt;
+    const partials=[...(d.partials||[]),{amount:finalAmt,method:(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?'مختلط':meth,cash:(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?cash:0,card:(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?card:0,date,type}];
     await sb.from('deliveries').update({
       received_amount:(d.receivedAmount||0)+finalAmt,
       partials,
