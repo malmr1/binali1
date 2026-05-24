@@ -225,11 +225,20 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 @media print{
   body *{visibility:hidden}
   #printArea,#printArea *{visibility:visible}
-  #printArea{position:fixed;inset:0;background:white;overflow:visible;display:block!important;padding:0}
-  .inv-wrap{page-break-inside:avoid;page-break-after:auto;margin:0 auto;max-width:190mm}
-  * {-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #printArea{position:fixed;inset:0;background:#fff;overflow:hidden;display:block!important;padding:0;z-index:99999}
+  .inv-wrap{page-break-inside:avoid;page-break-after:avoid;page-break-before:avoid;margin:0 auto;max-width:190mm}
+  * {-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  .no-print{display:none!important}
+  /* ألوان الطباعة - غامقة وواضحة */
+  .inv-wrap *{color:#111!important}
+  .inv-shop-name{color:#000!important;font-weight:900!important}
+  .inv-ttl{color:#000!important;font-weight:800!important}
+  .inv-row span:last-child{color:#000!important;font-weight:700!important}
+  table{border-collapse:collapse!important}
+  table td,table th{border:1px solid #333!important;color:#000!important;padding:4px 7px!important}
+  table th{background:#eee!important;font-weight:900!important}
 }
-@page{size:A4 portrait;margin:10mm}
+@page{size:A4 portrait;margin:8mm}
 
 /* Hijri Calendar */
 .hijri-picker-overlay{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7)}
@@ -656,6 +665,7 @@ async function fetchAll(){
     returned:x.returned||false,returnDate:x.return_date,returnAmount:x.return_amount||0,returnNotes:x.return_notes,isDraft:x.is_draft||false,
     measurements:x.measurements||{},extraItems:x.extra_items||[],
     insuranceCollectTime:x.insurance_collect_time||'order',insuranceCollectOther:x.insurance_collect_other||'',
+    insuranceCollected:x.insurance_collected||false,insuranceCollectDate:x.insurance_collect_date||'',
   }));
   db.expenses=(e.data||[]).map(x=>({id:x.id,date:x.date,catMain:x.cat_main,catSub:x.cat_sub,description:x.description,amount:x.amount||0,employeeId:x.employee_id}));
   db.attendance=(a.data||[]).map(x=>({id:x.id,userId:x.user_id,userName:x.user_name,shift:x.shift,date:x.date,checkin:x.checkin_time,checkout:x.checkout_time,duration:x.duration_minutes}));
@@ -1392,14 +1402,25 @@ function openOrderActions(orderId){
         </div>
         ${o.insurance>0?`
         <div class="section-box">
-          <div class="section-box-ttl">🛡️ التأمين (${(o.insurance||0).toLocaleString()} ر.س)</div>
-          <div class="frow">
-            <div class="fg"><label>الحالة</label>
-              <select id="insRet"><option value="false" ${!o.insuranceReturned?'selected':''}>لم يُسترد</option><option value="true" ${o.insuranceReturned?'selected':''}>تم الاسترداد</option></select>
+          <div class="section-box-ttl">🛡️ التأمين — ${(o.insurance||0).toLocaleString()} ر.س</div>
+          ${!o.insuranceCollected?`
+          <div style="background:var(--d4);padding:9px;border-radius:2px;margin-bottom:8px;border-right:3px solid var(--blue)">
+            <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:6px">💰 تحصيل التأمين (يُسجَّل كدخل)</div>
+            <div style="display:flex;gap:8px;align-items:flex-end">
+              <div class="fg" style="margin:0;flex:1"><label style="font-size:10px">تاريخ التحصيل</label><input type="date" id="insCollectDate" value="${new Date().toISOString().split('T')[0]}"></div>
+              <button class="btn-add" style="margin-bottom:0;background:var(--blue);color:white;border:none" onclick="saveInsuranceCollect(${orderId})">تسجيل الدخل</button>
             </div>
-            <div class="fg"><label>تاريخ الاسترداد</label><input type="date" id="insRetDate" value="${o.insuranceReturnDate||''}"></div>
-            <button class="btn-add" style="margin-bottom:2px" onclick="saveInsurance(${orderId})">حفظ</button>
-          </div>
+          </div>`:`
+          <div style="font-size:11px;color:var(--blue);margin-bottom:8px;padding:6px;background:rgba(41,128,185,.1);border-radius:2px">✅ تم التحصيل بتاريخ ${o.insuranceCollectDate||''}</div>`}
+          ${o.insuranceCollected&&!o.insuranceReturned?`
+          <div style="background:var(--d4);padding:9px;border-radius:2px;border-right:3px solid var(--orange)">
+            <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px">↩️ استرداد التأمين (يُسجَّل كخرج)</div>
+            <div style="display:flex;gap:8px;align-items:flex-end">
+              <div class="fg" style="margin:0;flex:1"><label style="font-size:10px">تاريخ الاسترداد</label><input type="date" id="insRetDate" value=""></div>
+              <button class="btn-add" style="margin-bottom:0;background:var(--orange);color:white;border:none" onclick="saveInsuranceReturn(${orderId})">تسجيل الخرج</button>
+            </div>
+          </div>`:''}
+          ${o.insuranceReturned?`<div style="font-size:11px;color:var(--green);padding:6px;background:rgba(39,174,96,.1);border-radius:2px">✅ تم الاسترداد بتاريخ ${o.insuranceReturnDate||''}</div>`:''}
         </div>`:''}
         ${canEditDel?`
         <div class="section-box">
@@ -1421,20 +1442,57 @@ async function addPartial(oid){
   const method=document.getElementById('pMeth').value;
   const o=db.orders.find(x=>x.id===oid);
   const transferTo=document.getElementById('pTransferTo')?.value||'';
-  let payDetail={amount:amt,date:document.getElementById('pDate').value,method,transferTo:(method==='تحويل'||method==='تحويل كامل'||method==='تحويل جزئي')?transferTo:''};
-  if(method==='__split__'||method==='مختلط (نقدي+شبكة)'){
+  const payDate=document.getElementById('pDate').value||new Date().toISOString().split('T')[0];
+  let payDetail={amount:amt,date:payDate,method,transferTo:(method==='تحويل كامل'||method==='تحويل جزئي')?transferTo:''};
+  if(method==='مختلط (نقدي+شبكة)'){
     const cash=parseFloat(document.getElementById('pCash').value)||0;
     const card=parseFloat(document.getElementById('pCard').value)||0;
-    payDetail.method='مختلط';
-    payDetail.cash=cash;
-    payDetail.card=card;
-    payDetail.amount=cash+card;
+    payDetail.method='مختلط';payDetail.cash=cash;payDetail.card=card;payDetail.amount=cash+card;
   }
   const ps=[...(o.partials||[]),payDetail];
   showLoading('جاري الحفظ...');
   await sb.from('orders').update({partial_payments:ps}).eq('id',o.dbId);
+  // تسجيل الدفعة كدخل بتاريخها الفعلي
+  await sb.from('expenses').insert({
+    shop_id:currentShop?.id||1,date:payDate,
+    cat_main:'إيرادات',cat_sub:'دفعة طلب',
+    description:`دفعة طلب #${oid} - ${o.client} (${payDetail.method})`,
+    amount:-(payDetail.amount),
+  });
   await logAudit('دفعة جديدة','orders',oid,`${payDetail.amount.toLocaleString()} ر.س - ${payDetail.method}`);
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('تمت الدفعة ✓','success');
+}
+
+async function saveInsuranceCollect(oid){
+  const o=db.orders.find(x=>x.id===oid);if(!o)return;
+  const dt=document.getElementById('insCollectDate')?.value||new Date().toISOString().split('T')[0];
+  const insAmt=o.insurance||0;
+  showLoading('...');
+  await sb.from('orders').update({insurance_collected:true,insurance_collect_date:dt}).eq('id',o.dbId);
+  await sb.from('expenses').insert({
+    shop_id:currentShop?.id||1,date:dt,
+    cat_main:'تأمين',cat_sub:'تحصيل تأمين طلب',
+    description:`تحصيل تأمين طلب #${oid} - ${o.client}`,
+    amount:-insAmt,
+  });
+  await logAudit('تحصيل تأمين','orders',oid,`${insAmt} ر.س`);
+  await fetchAll();hideLoading();closeModal();renderOrders();showToast('✅ تم تسجيل التحصيل كدخل','success');
+}
+
+async function saveInsuranceReturn(oid){
+  const o=db.orders.find(x=>x.id===oid);if(!o)return;
+  const dt=document.getElementById('insRetDate')?.value||new Date().toISOString().split('T')[0];
+  const insAmt=o.insurance||0;
+  showLoading('...');
+  await sb.from('orders').update({insurance_returned:true,insurance_return_date:dt}).eq('id',o.dbId);
+  await sb.from('expenses').insert({
+    shop_id:currentShop?.id||1,date:dt,
+    cat_main:'تأمين',cat_sub:'استرداد تأمين طلب',
+    description:`استرداد تأمين طلب #${oid} - ${o.client}`,
+    amount:insAmt,
+  });
+  await logAudit('استرداد تأمين','orders',oid,`${insAmt} ر.س`);
+  await fetchAll();hideLoading();closeModal();renderOrders();showToast('✅ تم تسجيل الاسترداد كخرج','success');
 }
 
 async function saveInsurance(oid){
@@ -1664,10 +1722,10 @@ function printInvoice(oid){
   if(!canSeePrice){showToast('ليس لديك صلاحية طباعة الفاتورة بالمبلغ','error');return;}
   const pa=document.getElementById('printArea');
   pa.style.display='block';
-  pa.innerHTML=buildInv(o,'نسخة العميل','#2980B9');
+  pa.innerHTML=`<div style="width:190mm;margin:0 auto;font-family:Tajawal,sans-serif">${buildInv(o,'فاتورة','#1a1a2e')}</div>`;
   setTimeout(()=>{
-    try{JsBarcode('#ibc-نسخة-العميل',String(oid).padStart(6,'0'),{format:'CODE128',width:1.9,height:40,displayValue:true,text:`#${oid}`,fontSize:10,margin:5,background:'#ffffff',lineColor:'#000000'});}catch(e){}
-    setTimeout(()=>{window.print();pa.style.display='none';pa.style.flexDirection='';pa.style.alignItems='';},600);
+    try{JsBarcode('#ibc-فاتورة',String(oid).padStart(6,'0'),{format:'CODE128',width:1.9,height:40,displayValue:true,text:`#${oid}`,fontSize:10,margin:5,background:'#ffffff',lineColor:'#000000'});}catch(e){}
+    setTimeout(()=>{window.print();pa.style.display='none';},600);
   },200);
 }
 
@@ -2249,39 +2307,65 @@ function renderReports(){
   // صافي الربح
   const profit=totalIncome-totalExpenses;
 
-  const insIncome=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)<0).reduce((s,e)=>s+Math.abs(e.amount||0),0);
-  const insOut=fExp.filter(e=>e.catMain==='تأمين'&&(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
+  // بوكسات التأمين من البيانات الفعلية
+  const allOrderIns=db.orders.filter(o=>o.insurance>0);
+  const allDelIns=db.deliveries.filter(d=>d.insuranceAmount>0);
+  const insPending=[...allOrderIns.filter(o=>!o.insuranceCollected&&(o.insuranceCollectTime==='delivery'||o.insuranceCollectTime==='order')),...allDelIns.filter(d=>!d.insuranceCollected)];
+  const insCollected=[...allOrderIns.filter(o=>o.insuranceCollected&&!o.insuranceReturned),...allDelIns.filter(d=>d.insuranceCollected&&!d.insuranceReturned)];
+  const insReturned=[...allOrderIns.filter(o=>o.insuranceReturned),...allDelIns.filter(d=>d.insuranceReturned)];
+  const insPendingAmt=insPending.reduce((s,x)=>s+(x.insurance||x.insuranceAmount||0),0);
+  const insCollectedAmt=insCollected.reduce((s,x)=>s+(x.insurance||x.insuranceAmount||0),0);
+  const insReturnedAmt=insReturned.reduce((s,x)=>s+(x.insurance||x.insuranceAmount||0),0);
 
   document.getElementById('finGrid').innerHTML=`
-    <div class="fin-card" style="border-top:2px solid var(--gr);opacity:.8">
-      <div style="font-size:9px;color:var(--gr);margin-bottom:3px">للمعلومات فقط</div>
+    <div class="fin-card" style="border-top:2px solid rgba(180,180,180,.4)">
+      <div style="font-size:9px;color:#aaa;margin-bottom:3px;letter-spacing:1px">للمعلومات فقط</div>
       <div class="fc-lbl">إجمالي المبيعات</div>
-      <div class="fc-val" style="color:var(--gold);font-size:18px">${salesInfo.toLocaleString()}<small> ر.س</small></div>
+      <div class="fc-val" style="color:var(--gold)">${salesInfo.toLocaleString()} <small>ر.س</small></div>
       <div class="fc-sub">${fOrders.length} طلب</div>
     </div>
-    <div class="fin-card" style="border-top:2px solid var(--gr);opacity:.8">
-      <div style="font-size:9px;color:var(--gr);margin-bottom:3px">للمعلومات فقط</div>
+    <div class="fin-card" style="border-top:2px solid rgba(180,180,180,.4)">
+      <div style="font-size:9px;color:#aaa;margin-bottom:3px;letter-spacing:1px">للمعلومات فقط</div>
       <div class="fc-lbl">المتبقي غير المحصل</div>
-      <div class="fc-val" style="color:var(--orange);font-size:18px">${uncollected.toLocaleString()}<small> ر.س</small></div>
+      <div class="fc-val" style="color:var(--orange)">${uncollected.toLocaleString()} <small>ر.س</small></div>
     </div>
-    <div class="fin-card" style="border-top:2px solid var(--green)">
+    <div class="fin-card" style="border-top:2px solid rgba(180,180,180,.4)">
+      <div style="font-size:9px;color:#aaa;margin-bottom:3px;letter-spacing:1px">للمعلومات فقط</div>
+      <div class="fc-lbl">التسليمات</div>
+      <div class="fc-val" style="color:var(--blue)">${incomeFromDeliveries.toLocaleString()} <small>ر.س</small></div>
+      <div class="fc-sub">${delivCount} تسليم</div>
+    </div>
+    <div class="fin-card" style="border-top:3px solid var(--green)">
       <div class="fc-lbl">💰 إجمالي الدخل</div>
-      <div class="fc-val" style="color:var(--green);font-size:18px">${totalIncome.toLocaleString()}<small> ر.س</small></div>
+      <div class="fc-val" style="color:var(--green)">${totalIncome.toLocaleString()} <small>ر.س</small></div>
       <div class="fc-sub">كل مبلغ دخل الصندوق فعلاً</div>
     </div>
-    <div class="fin-card" style="border-top:2px solid var(--red)">
+    <div class="fin-card" style="border-top:3px solid var(--red)">
       <div class="fc-lbl">📤 إجمالي الخرج</div>
-      <div class="fc-val" style="color:var(--red);font-size:18px">${totalExpenses.toLocaleString()}<small> ر.س</small></div>
+      <div class="fc-val" style="color:var(--red)">${totalExpenses.toLocaleString()} <small>ر.س</small></div>
       <div class="fc-sub">مصروفات + خصومات + استرداد تأمين</div>
     </div>
-    <div class="fin-card" style="border-top:2px solid ${profit>=0?'var(--green)':'var(--red)'}">
+    <div class="fin-card" style="border-top:3px solid ${profit>=0?'var(--green)':'var(--red)'}">
       <div class="fc-lbl">📊 صافي الربح</div>
-      <div class="fc-val" style="color:${profit>=0?'var(--green)':'var(--red)'};font-size:18px">${profit.toLocaleString()}<small> ر.س</small></div>
+      <div class="fc-val" style="color:${profit>=0?'var(--green)':'var(--red)'}">${profit.toLocaleString()} <small>ر.س</small></div>
       <div class="fc-sub">الدخل − الخرج</div>
     </div>
-    <div class="fin-card"><div class="fc-lbl">المرتجعات (${fReturns.length})</div><div class="fc-val" style="color:var(--red)">${returnsAmt.toLocaleString()}<small> ر.س</small></div></div>
-    <div class="fin-card"><div class="fc-lbl">تأمين محصّل</div><div class="fc-val" style="color:var(--blue)">${insIncome.toLocaleString()}<small> ر.س</small></div></div>
-    <div class="fin-card"><div class="fc-lbl">تأمين مسترد</div><div class="fc-val" style="color:var(--orange)">${insOut.toLocaleString()}<small> ر.س</small></div></div>
+    <div class="fin-card"><div class="fc-lbl">المرتجعات (${fReturns.length})</div><div class="fc-val" style="color:var(--red)">${returnsAmt.toLocaleString()} <small>ر.س</small></div></div>
+    <div class="fin-card" style="border-top:3px solid var(--blue)">
+      <div class="fc-lbl">🛡️ تأمين محصّل</div>
+      <div class="fc-val" style="color:var(--blue)">${insCollectedAmt.toLocaleString()} <small>ر.س</small></div>
+      <div class="fc-sub">${insCollected.length} تأمين</div>
+    </div>
+    <div class="fin-card" style="border-top:3px solid var(--orange)">
+      <div class="fc-lbl">⏳ تأمين معلق</div>
+      <div class="fc-val" style="color:var(--orange)">${insPendingAmt.toLocaleString()} <small>ر.س</small></div>
+      <div class="fc-sub">${insPending.length} تأمين لم يُحصَّل</div>
+    </div>
+    <div class="fin-card" style="border-top:3px solid var(--gr)">
+      <div class="fc-lbl">↩️ تأمين مسترد</div>
+      <div class="fc-val" style="color:var(--gr)">${insReturnedAmt.toLocaleString()} <small>ر.س</small></div>
+      <div class="fc-sub">${insReturned.length} تأمين</div>
+    </div>
   `;
   const firstStep=(cfg.trackingSteps||[])[0]?.name||'استلام الطلب';
   const inProgress=fOrders.filter(o=>o.status!=='تم التسليم'&&o.status!=='الحمدلله'&&o.status!==firstStep).length;
