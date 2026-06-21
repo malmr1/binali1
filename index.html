@@ -1445,13 +1445,7 @@ async function saveNewOrder(isDraft=false){
   const insAmtNew=parseFloat(document.getElementById('fIns')?.value)||0;
   const insCollectNew=document.getElementById('fInsCollect')?.value||'order';
   if(insAmtNew>0&&insCollectNew==='order'){
-    await sb.from('expenses').insert({
-      shop_id:currentShop?.id||1,
-      date:document.getElementById('fODate').value||new Date().toISOString().split('T')[0],
-      cat_main:'تأمين',cat_sub:'استلام تأمين',
-      description:`تأمين طلب #${inv} - ${client}`,
-      amount:-insAmtNew,
-    });
+    // التأمين يُحسب من بيانات الطلب
   }
   await logAudit('إضافة طلب','orders',inv,`طلب جديد: ${client}`);
   await fetchAll();hideLoading();closeModal();renderOrders();
@@ -1554,13 +1548,7 @@ async function addPartial(oid){
   const ps=[...(o.partials||[]),payDetail];
   showLoading('جاري الحفظ...');
   await sb.from('orders').update({partial_payments:ps}).eq('id',o.dbId);
-  // تسجيل الدفعة كدخل بتاريخها الفعلي
-  await sb.from('expenses').insert({
-    shop_id:currentShop?.id||1,date:payDate,
-    cat_main:'إيرادات',cat_sub:'دفعة طلب',
-    description:`دفعة طلب #${oid} - ${o.client} (${payDetail.method})`,
-    amount:-(payDetail.amount),
-  });
+  // الدفعة تُحسب من بيانات الطلب مباشرة
   await logAudit('دفعة جديدة','orders',oid,`${payDetail.amount.toLocaleString()} ر.س - ${payDetail.method}`);
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('تمت الدفعة ✓','success');
 }
@@ -1571,12 +1559,7 @@ async function saveInsuranceCollect(oid){
   const insAmt=o.insurance||0;
   showLoading('...');
   await sb.from('orders').update({insurance_collected:true,insurance_collect_date:dt}).eq('id',o.dbId);
-  await sb.from('expenses').insert({
-    shop_id:currentShop?.id||1,date:dt,
-    cat_main:'تأمين',cat_sub:'تحصيل تأمين طلب',
-    description:`تحصيل تأمين طلب #${oid} - ${o.client}`,
-    amount:-insAmt,
-  });
+  // التأمين المحصّل يُحسب من بيانات الطلب
   await logAudit('تحصيل تأمين','orders',oid,`${insAmt} ر.س`);
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('✅ تم تسجيل التحصيل كدخل','success');
 }
@@ -1614,14 +1597,7 @@ async function saveInsurance(oid){
     insurance_collect_other:collectOther,
   }).eq('id',o.dbId);
   // If newly collected (not returned) → add as income expense
-  if(!ret&&!wasReturned&&collectTime!=='delivery'&&insAmt>0){
-    await sb.from('expenses').insert({
-      shop_id:currentShop?.id||1,
-      date:today,cat_main:'تأمين',cat_sub:'استلام تأمين',
-      description:`تأمين طلب #${oid} - ${o.client}`,
-      amount:-insAmt, // negative = income marker
-    });
-  }
+  // التأمين المستلم يُحسب من بيانات الطلب
   // If newly returned → add as expense (outgoing)
   if(ret&&!wasReturned&&insAmt>0){
     await sb.from('expenses').insert({
@@ -2096,42 +2072,97 @@ async function saveSalary(){
 }
 
 function openWithdrawModal(){
-  const emps=db.users.map(u=>`<option value="${u.id}" data-base="${u.baseSalary}">${u.name}</option>`).join('');
+  const emps=db.users.map(u=>`<option value="${u.id}" data-base="${u.baseSalary||0}">${u.name}</option>`).join('');
   const now=new Date();
+  const today=now.toISOString().split('T')[0];
+  const month=now.toISOString().slice(0,7);
   document.getElementById('MC').innerHTML=`
   <div class="overlay" onclick="if(event.target===this)closeModal()">
-    <div class="modal modal-sm">
-      <div class="m-hdr"><div class="m-ttl">- سحبية</div><button class="m-close" onclick="closeModal()">×</button></div>
+    <div class="modal" style="max-width:680px">
+      <div class="m-hdr"><div class="m-ttl">- سحبيات</div><button class="m-close" onclick="closeModal()">×</button></div>
       <div class="m-body">
-        <div class="a-info">السحبية تُخصم من راتب الموظف</div>
-        <div class="fg"><label>الموظف</label><select id="wEmp">${emps}</select></div>
-        <div class="fg"><label>المبلغ</label><input type="number" id="wAmt"></div>
-        <div class="fg"><label>الشهر</label><input type="month" id="wMon" value="${now.toISOString().slice(0,7)}"></div>
-        <div class="fg"><label>التاريخ</label><input type="date" id="wDate" value="${now.toISOString().split('T')[0]}"></div>
-        <div class="fg"><label>ملاحظات</label><input type="text" id="wNotes"></div>
+        <div class="a-info">السحبية تُخصم من راتب الموظف وتُسجَّل في المصروفات</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <div class="fg" style="margin:0"><label>التاريخ المشترك</label><input type="date" id="wDate" value="${today}"></div>
+          <div class="fg" style="margin:0"><label>الشهر</label><input type="month" id="wMon" value="${month}"></div>
+        </div>
+        <div id="withdrawItemsContainer"></div>
+        <div style="text-align:left;margin-top:8px">
+          <button class="btn-sm" onclick="addWithdrawRow()">+ إضافة موظف</button>
+        </div>
       </div>
       <div class="m-foot">
         <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
-        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveWithdraw()">حفظ</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="saveMultiWithdraw()">حفظ السحبيات</button>
       </div>
     </div>
   </div>`;
+  addWithdrawRow();
 }
 
-async function saveWithdraw(){
-  const empId=parseInt(document.getElementById('wEmp').value);
-  const emp=db.users.find(u=>u.id===empId);
-  const amt=parseFloat(document.getElementById('wAmt').value)||0;
+function addWithdrawRow(){
+  const emps=db.users.map(u=>`<option value="${u.id}" data-base="${u.baseSalary||0}">${u.name}</option>`).join('');
+  const container=document.getElementById('withdrawItemsContainer');
+  const row=document.createElement('div');
+  row.className='withdraw-row';
+  row.style.cssText='display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:8px;align-items:flex-end;margin-bottom:10px;padding:10px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)';
+  row.innerHTML=`
+    <div class="fg" style="margin:0"><label style="font-size:10px;color:var(--gr)">الموظف</label>
+      <select class="w-emp">${emps}</select>
+    </div>
+    <div class="fg" style="margin:0"><label style="font-size:10px;color:var(--gr)">المبلغ (ر.س)</label>
+      <input type="number" class="w-amt" placeholder="0" min="0">
+    </div>
+    <div class="fg" style="margin:0"><label style="font-size:10px;color:var(--gr)">ملاحظات</label>
+      <input type="text" class="w-notes" placeholder="اختياري">
+    </div>
+    <button class="btn-sm red" style="margin-bottom:0;padding:8px 10px;align-self:flex-end" onclick="this.parentElement.remove()">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+async function saveMultiWithdraw(){
   const date=document.getElementById('wDate').value;
   const month=document.getElementById('wMon').value;
-  const notes=document.getElementById('wNotes').value;
-  if(!amt){showToast('أدخل المبلغ','error');return;}
-  showLoading('...');
-  await sb.from('salaries').insert({shop_id:currentShop?.id||1,employee_id:empId,employee_name:emp?.name||'',type:'withdrawal',amount:amt,base_salary:emp?.baseSalary||0,month,date,notes,created_by:currentUser.name});
-  // Auto-create expense
-  await sb.from('expenses').insert({shop_id:currentShop?.id||1,date,cat_main:'سحبيات',cat_sub:emp?.name||'',description:`سحبية ${emp?.name||''} - ${month}`,amount:amt});
-  await logAudit('سحبية','salaries',empId,`${emp?.name} - ${amt.toLocaleString()} ر.س`);
-  await fetchAll();hideLoading();closeModal();renderSalaries();showToast('تم تسجيل السحبية ✓','success');
+  if(!date){showToast('اختر التاريخ','error');return;}
+  const rows=document.querySelectorAll('.withdraw-row');
+  const items=[];
+  rows.forEach(row=>{
+    const empId=parseInt(row.querySelector('.w-emp')?.value)||0;
+    const emp=db.users.find(u=>u.id===empId);
+    const amt=parseFloat(row.querySelector('.w-amt')?.value)||0;
+    const notes=row.querySelector('.w-notes')?.value||'';
+    if(amt>0&&empId)items.push({empId,emp,amt,notes});
+  });
+  if(!items.length){showToast('أضف موظفاً واحداً على الأقل','error');return;}
+  showLoading('جاري الحفظ...');
+  let saved=0;
+  for(const item of items){
+    const{error:e1}=await sb.from('salaries').insert({
+      shop_id:currentShop?.id||1,
+      employee_id:item.empId,
+      employee_name:item.emp?.name||'',
+      type:'withdrawal',
+      amount:item.amt,
+      base_salary:item.emp?.baseSalary||0,
+      month,date,
+      notes:item.notes,
+      created_by:currentUser.name
+    });
+    if(!e1){
+      await sb.from('expenses').insert({
+        shop_id:currentShop?.id||1,date,
+        cat_main:'سحبيات',
+        cat_sub:item.emp?.name||'',
+        description:`سحبية ${item.emp?.name||''} - ${month}`,
+        amount:item.amt
+      });
+      saved++;
+    }
+  }
+  await logAudit('سحبيات','salaries',0,`${saved} سحبية`);
+  await fetchAll();hideLoading();closeModal();renderSalaries();
+  showToast(`✅ تم حفظ ${saved} سحبية`,'success');
 }
 
 // ===== EXPENSES =====
@@ -4343,13 +4374,7 @@ async function saveDelInsCollect(delId){
     insurance_collect_date:dt,
     insurance_status:'collected'
   }).eq('id',delId);
-  // يُسجَّل كدخل (قيمة سالبة)
-  await sb.from('expenses').insert({
-    shop_id:currentShop?.id||1,date:dt,
-    cat_main:'تأمين',cat_sub:'تحصيل تأمين تسليم',
-    description:`تحصيل تأمين تسليم - ${d.client}`,
-    amount:-insAmt,
-  });
+  // التأمين المحصّل يُحسب من بيانات التسليم
   await logAudit('تحصيل تأمين تسليم','deliveries',delId,`${insAmt} ر.س`);
   await fetchAll();hideLoading();closeModal();renderDeliveries();
   showToast('✅ تم تسجيل التحصيل كدخل','success');
