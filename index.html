@@ -2975,7 +2975,103 @@ function renderSettings(){
       ${isManager?`<div class="tag-add" style="margin-top:9px"><input type="text" id="newExpCat" placeholder="بند رئيسي جديد"><button onclick="addExpCat()">+</button></div>`:''}
     </div>`;
   }
+  // مزامنة التأمينات - للمدير فقط
+  if(isManager){
+    cards+=`
+    <div class="set-card" style="grid-column:1/-1;border:1px solid rgba(201,168,76,.3)">
+      <div class="set-ttl">🛡️ مزامنة التأمينات القديمة</div>
+      <div class="a-warn" style="margin-bottom:12px">هذه الأداة تُصلح التأمينات المحصّلة والمستردة القديمة التي لم تُسجَّل في الدخل/الخرج. شغّلها مرة واحدة فقط.</div>
+      <div id="syncInsStatus" style="margin-bottom:10px;font-size:12px;color:var(--gr)">اضغط الزر لمعاينة التأمينات غير المسجّلة قبل المزامنة.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-add" style="background:var(--blue)" onclick="previewOldInsurance()">🔍 معاينة</button>
+        <button class="btn-add" onclick="syncOldInsurance()">⚡ تطبيق المزامنة</button>
+      </div>
+    </div>`;
+  }
   document.getElementById('setGrid').innerHTML=cards||'<div class="a-info">لا توجد إعدادات متاحة لصلاحيتك</div>';
+}
+
+// ===== مزامنة التأمينات القديمة =====
+function getUnregisteredInsurances(){
+  // نجمع كل تسجيلات التأمين الموجودة في expenses
+  const existingCollect=new Set(db.expenses.filter(e=>(e.catSub||'').includes('تحصيل تأمين')||(e.description||'').includes('تحصيل تأمين')).map(e=>{
+    const m=(e.description||'').match(/TX\|(order|delivery):(\S+)/);
+    return m?`${m[1]}:${m[2]}`:null;
+  }).filter(Boolean));
+  const existingReturn=new Set(db.expenses.filter(e=>(e.catSub||'').includes('استرداد تأمين')||(e.description||'').includes('استرداد تأمين')).map(e=>{
+    const m=(e.description||'').match(/TX\|(order|delivery):(\S+)/);
+    return m?`${m[1]}:${m[2]}`:null;
+  }).filter(Boolean));
+
+  const toFix=[];
+  // طلبات
+  db.orders.filter(o=>!o.isDraft&&(o.insurance||0)>0).forEach(o=>{
+    const key=`order:${o.dbId||o.id}`;
+    if(o.insuranceCollected&&!existingCollect.has(key)){
+      toFix.push({type:'collect',source:'order',key,label:`طلب #${o.id} - ${o.client}`,amount:o.insurance,date:o.insuranceCollectDate||o.orderDate,dbId:o.dbId||o.id,client:o.client,id:o.id});
+    }
+    if(o.insuranceReturned&&!existingReturn.has(key)){
+      toFix.push({type:'return',source:'order',key,label:`طلب #${o.id} - ${o.client}`,amount:o.insurance,date:o.insuranceReturnDate||o.orderDate,dbId:o.dbId||o.id,client:o.client,id:o.id});
+    }
+  });
+  // تسليمات
+  db.deliveries.filter(d=>(d.insuranceAmount||0)>0).forEach(d=>{
+    const key=`delivery:${d.id}`;
+    if(d.insuranceCollected&&!existingCollect.has(key)){
+      toFix.push({type:'collect',source:'delivery',key,label:`تسليم - ${d.client}`,amount:d.insuranceAmount,date:d.insuranceCollectDate||d.date,dbId:d.id,client:d.client,id:d.id});
+    }
+    if(d.insuranceReturned&&!existingReturn.has(key)){
+      toFix.push({type:'return',source:'delivery',key,label:`تسليم - ${d.client}`,amount:d.insuranceAmount,date:d.insuranceReturnDate||d.date,dbId:d.id,client:d.client,id:d.id});
+    }
+  });
+  return toFix;
+}
+
+function previewOldInsurance(){
+  const toFix=getUnregisteredInsurances();
+  const el=document.getElementById('syncInsStatus');
+  if(!el)return;
+  if(!toFix.length){el.innerHTML='<span style="color:var(--green)">✅ لا توجد تأمينات غير مسجّلة، كل شيء صح.</span>';return;}
+  const rows=toFix.map(f=>`
+    <tr>
+      <td style="color:var(--gold)">${f.label}</td>
+      <td><span class="badge ${f.type==='collect'?'b-green':'b-red'}">${f.type==='collect'?'محصّل → دخل':'مسترد → خرج'}</span></td>
+      <td style="font-weight:700">${(f.amount||0).toLocaleString()} ر.س</td>
+      <td style="color:var(--gr)">${f.date||'-'}</td>
+    </tr>`).join('');
+  el.innerHTML=`
+    <div style="font-size:12px;color:var(--orange);margin-bottom:8px">⚠️ وُجد ${toFix.length} تأمين غير مسجّل:</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;font-size:11px;margin-bottom:0">
+        <thead><tr><th>البيان</th><th>النوع</th><th>المبلغ</th><th>التاريخ</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+async function syncOldInsurance(){
+  const toFix=getUnregisteredInsurances();
+  if(!toFix.length){showToast('✅ لا يوجد شيء للمزامنة','success');return;}
+  if(!confirm(`سيتم إضافة ${toFix.length} سجل في الدخل/الخرج. متأكد؟`))return;
+  showLoading('جاري المزامنة...');
+  for(const f of toFix){
+    const isCollect=f.type==='collect';
+    const catSub=isCollect?`تحصيل تأمين ${f.source==='order'?'طلب':'تسليم'}`:`استرداد تأمين ${f.source==='order'?'طلب':'تسليم'}`;
+    const desc=isCollect
+      ?`تحصيل تأمين ${f.source==='order'?'طلب #'+f.id:'تسليم'} - ${f.client} TX|${f.key}`
+      :`استرداد تأمين ${f.source==='order'?'طلب #'+f.id:'تسليم'} - ${f.client} TX|${f.key}`;
+    await sb.from('expenses').insert({
+      shop_id:currentShop?.id||1,
+      date:f.date,
+      cat_main:'تأمين',
+      cat_sub:catSub,
+      description:desc,
+      amount:isCollect?-(f.amount):f.amount,
+    });
+  }
+  await fetchAll();hideLoading();
+  showToast(`✅ تمت مزامنة ${toFix.length} تأمين بنجاح`,'success');
+  previewOldInsurance();
 }
 
 async function saveAllSettings(){
