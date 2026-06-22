@@ -1585,7 +1585,13 @@ async function saveInsuranceCollect(oid){
   const insAmt=o.insurance||0;
   showLoading('...');
   await sb.from('orders').update({insurance_collected:true,insurance_collect_date:dt}).eq('id',o.dbId);
-  // التأمين المحصّل يُحسب من بيانات الطلب
+  // تسجيل التأمين المحصّل كدخل (amount سالب = دخل)
+  await sb.from('expenses').insert({
+    shop_id:currentShop?.id||1,date:dt,
+    cat_main:'تأمين',cat_sub:'تحصيل تأمين طلب',
+    description:`تحصيل تأمين طلب #${oid} - ${o.client} TX|order:${o.dbId||oid}`,
+    amount:-insAmt,
+  });
   await logAudit('تحصيل تأمين','orders',oid,`${insAmt} ر.س`);
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('✅ تم تسجيل التحصيل كدخل','success');
 }
@@ -4514,7 +4520,13 @@ async function saveDelInsCollect(delId){
     insurance_collect_date:dt,
     insurance_status:'collected'
   }).eq('id',delId);
-  // التأمين المحصّل يُحسب من بيانات التسليم
+  // تسجيل تأمين التسليم المحصّل كدخل (amount سالب = دخل)
+  await sb.from('expenses').insert({
+    shop_id:currentShop?.id||1,date:dt,
+    cat_main:'تأمين',cat_sub:'تحصيل تأمين تسليم',
+    description:`تحصيل تأمين تسليم - ${d.client} TX|delivery:${delId}`,
+    amount:-insAmt,
+  });
   await logAudit('تحصيل تأمين تسليم','deliveries',delId,`${insAmt} ر.س`);
   await fetchAll();hideLoading();closeModal();renderDeliveries();
   showToast('✅ تم تسجيل التحصيل كدخل','success');
