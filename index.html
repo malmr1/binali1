@@ -327,7 +327,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       <!-- TABS -->
       <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid rgba(201,168,76,.15)">
         <button id="tabOrders" onclick="switchOrderTab('orders')" style="background:none;border:none;padding:9px 20px;font-family:Tajawal,sans-serif;font-size:13px;font-weight:700;color:var(--gold);cursor:pointer;border-bottom:2px solid var(--gold);margin-bottom:-2px">👗 الطلبات</button>
-        <button id="tabDeliveries" onclick="switchOrderTab('deliveries')" style="background:none;border:none;padding:9px 20px;font-family:Tajawal,sans-serif;font-size:13px;font-weight:600;color:var(--gr);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px">📦 التسليمات</button>
+        <button id="tabDeliveries" onclick="switchOrderTab('deliveries')" style="background:none;border:none;padding:9px 20px;font-family:Tajawal,sans-serif;font-size:13px;font-weight:600;color:var(--gr);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px">📦 تسليمات قديمة</button>
       </div>
 
       <!-- ORDERS TAB -->
@@ -475,14 +475,14 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       </div>
 
       <!-- الكشف التفصيلي -->
-      <div class="sec-hdr"><div class="sec-ttl">📋 الكشف التفصيلي للطلبات والتسليمات</div></div>
+      <div class="sec-hdr"><div class="sec-ttl">📋 الكشف التفصيلي للطلبات والتسليمات القديمة</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
         <div>
           <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:8px">الطلبات</div>
           <div id="ordersDetailAccordion"></div>
         </div>
         <div>
-          <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:8px">التسليمات</div>
+          <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:8px">تسليمات قديمة</div>
           <div id="deliveriesDetailAccordion"></div>
         </div>
       </div>
@@ -510,6 +510,19 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       <div class="sec-hdr"><div class="sec-ttl">👥 تقرير الموظفين</div></div>
       <div class="tw" style="margin-bottom:18px"><table><thead><tr><th>الموظف</th><th>عدد الطلبات</th><th>إجمالي المبيعات</th><th>المحصّل</th><th>المتبقي</th></tr></thead><tbody id="empRepTbl"></tbody></table></div>
 
+      <!-- كشف الحركات المالية -->
+      <div class="sec-hdr"><div class="sec-ttl">📊 كشف الحركات المالية</div></div>
+      <div class="tw" style="margin-bottom:18px">
+        <table>
+          <thead><tr><th>التاريخ</th><th>النوع</th><th>رقم النظام</th><th>رقم المحل</th><th>العميل</th><th>المبلغ</th></tr></thead>
+          <tbody id="financialMovementTbl"></tbody>
+        </table>
+        <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-top:1px solid var(--d4)">
+          <span style="font-size:12px;font-weight:700">إجمالي الدخل في الفترة</span>
+          <span id="financialMovementTotal" style="font-size:16px;font-weight:900;color:var(--green)">0 ر.س</span>
+        </div>
+      </div>
+
       <!-- التحليل الشهري -->
       <div class="sec-hdr"><div class="sec-ttl">📅 التحليل الشهري</div></div>
       <div class="tw"><table><thead><tr><th>الشهر</th><th>المبيعات</th><th>المحصّل</th><th>مرتجعات</th><th>مصروفات</th><th>الربح</th><th>الطلبات</th></tr></thead><tbody id="monthTbl"></tbody></table></div>
@@ -536,7 +549,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 
     <!-- DELIVERIES -->
     <div class="page" id="page-deliveries">
-      <div class="topbar"><div><div class="pg-title">التسليمات</div><div class="pg-sub">تسجيل التسليمات النهائية</div></div>
+      <div class="topbar"><div><div class="pg-title">تسليمات قديمة</div><div class="pg-sub">تسجيل المقبوضات من الطلبات القديمة</div></div>
         <button class="btn-add" onclick="openDeliveryModal()" id="btnAddDelivery">+ تسليم جديد</button>
       </div>
       <div class="tw">
@@ -692,6 +705,7 @@ async function fetchAll(){
     measurements:x.measurements||{},extraItems:x.extra_items||[],
     insuranceCollectTime:x.insurance_collect_time||'order',insuranceCollectOther:x.insurance_collect_other||'',
     insuranceCollected:x.insurance_collected||false,insuranceCollectDate:x.insurance_collect_date||'',
+    finalDeliveryDate:x.final_delivery_date||'',
   }));
   db.expenses=(e.data||[]).map(x=>({id:x.id,date:x.date,catMain:x.cat_main,catSub:x.cat_sub,description:x.description,amount:x.amount||0,employeeId:x.employee_id}));
   db.attendance=(a.data||[]).map(x=>({id:x.id,userId:x.user_id,userName:x.user_name,shift:x.shift,date:x.date,checkin:x.checkin_time,checkout:x.checkout_time,duration:x.duration_minutes}));
@@ -1553,9 +1567,58 @@ function openOrderActions(orderId){
             <button class="btn-add" style="margin-bottom:2px" onclick="saveDelivery(${orderId})">حفظ</button>
           </div>
         </div>`:''}
+        ${!['تم التسليم','الحمدلله'].includes(o.status)?`
+        <div class="section-box" style="border-right:3px solid var(--green)">
+          <div class="section-box-ttl" style="color:var(--green)">✅ تسليم نهائي وإغلاق الطلب</div>
+          <div style="font-size:11px;color:var(--gr);margin-bottom:10px">
+            المتبقي: <strong style="color:${calcRem(o)>0?'var(--red)':'var(--green)'}">${calcRem(o).toLocaleString()} ر.س</strong>
+            ${calcRem(o)===0?'<span style="color:var(--green)"> — الطلب مدفوع بالكامل، سيتغير التتبع فقط</span>':''}
+          </div>
+          <div class="frow">
+            <div class="fg"><label>تاريخ التسليم الفعلي</label><input type="date" id="finalDelDate" value="${new Date().toISOString().split('T')[0]}"></div>
+            <div class="fg"><label>طريقة الدفع</label><select id="finalDelMeth" onchange="toggleTransferRow(this.value,'finalTransferRow')">${getPayOpts()}</select></div>
+          </div>
+          <div id="finalTransferRow" style="display:none;margin-bottom:8px">
+            <div class="fg"><label>📲 المحوَّل إليه</label>
+              <select id="finalTransferTo">${(cfg.transferRecipients||[]).map(r=>`<option>${r}</option>`).join('')}</select>
+            </div>
+          </div>
+          <button class="btn-add" style="background:var(--green);color:white;border:none;width:100%;margin-top:6px" onclick="saveFinalDelivery(${orderId})">
+            ✅ تأكيد التسليم النهائي
+          </button>
+        </div>`:''}
       </div>
     </div>
   </div>`;
+}
+
+async function saveFinalDelivery(oid){
+  const o=db.orders.find(x=>x.id===oid);if(!o)return;
+  const finalDate=document.getElementById('finalDelDate').value||new Date().toISOString().split('T')[0];
+  const rem=calcRem(o);
+  const method=document.getElementById('finalDelMeth')?.value||'نقدي';
+  const transferTo=document.getElementById('finalTransferTo')?.value||'';
+  const confirmMsg=rem>0
+    ?`تأكيد التسليم النهائي:
+المبلغ المتبقي: ${rem.toLocaleString()} ر.س
+سيُسجَّل كدفعة تسليم نهائي بتاريخ ${finalDate}
+هل تأكد؟`
+    :`الطلب مدفوع بالكامل.
+سيتغير التتبع فقط بدون تسجيل دفعة.
+هل تأكد؟`;
+  if(!confirm(confirmMsg))return;
+  showLoading('جاري التسليم النهائي...');
+  // لو في متبقي سجّل دفعة تسليم نهائي
+  if(rem>0){
+    const payDetail={amount:rem,date:finalDate,method,transferTo:transferTo,isFinalDelivery:true};
+    const ps=[...(o.partials||[]),payDetail];
+    await sb.from('orders').update({partial_payments:ps,status:'تم التسليم',final_delivery_date:finalDate}).eq('id',o.dbId);
+  } else {
+    await sb.from('orders').update({status:'تم التسليم',final_delivery_date:finalDate}).eq('id',o.dbId);
+  }
+  await logAudit('تسليم نهائي','orders',oid,`تم التسليم بتاريخ ${finalDate}${rem>0?' - مبلغ: '+rem.toLocaleString():' - مدفوع كامل'}`);
+  await fetchAll();hideLoading();closeModal();renderOrders();
+  showToast(`✅ تم التسليم النهائي للطلب #${oid}`,'success');
 }
 
 async function addPartial(oid){
@@ -2456,6 +2519,10 @@ function renderReports(){
   const fDeliveries=db.deliveries.filter(d=>{const dt=new Date(d.date);return dt>=from&&dt<=to;});
   // للمعلومات فقط
   const salesInfo=fOrders.reduce((s,o)=>s+(o.amount||0),0);
+  // الطلبات المسلّمة خلال الفترة (بتاريخ التسليم الفعلي)
+  const finalDelivered=db.orders.filter(o=>o.finalDeliveryDate&&dateInRange(o.finalDeliveryDate,from,to));
+  const finalDeliveredAmt=finalDelivered.reduce((s,o)=>s+(o.amount||0),0);
+  const finalDeliveredCount=finalDelivered.length;
   const uncollected=fOrders.reduce((s,o)=>s+Math.max(0,calcRem(o)),0);
   const returnsAmt=fReturns.reduce((s,r)=>s+(r.amount||0),0);
   const delivCount=fDeliveries.length;
@@ -2507,9 +2574,15 @@ function renderReports(){
     </div>
     <div class="fin-card" style="border-top:2px solid rgba(180,180,180,.4)">
       <div style="font-size:9px;color:#aaa;margin-bottom:3px;letter-spacing:1px">للمعلومات فقط</div>
-      <div class="fc-lbl">التسليمات</div>
+      <div class="fc-lbl">تسليمات قديمة</div>
       <div class="fc-val" style="color:var(--blue)">${incomeFromDeliveries.toLocaleString()} <small>ر.س</small></div>
       <div class="fc-sub">${delivCount} تسليم</div>
+    </div>
+    <div class="fin-card" style="border-top:2px solid var(--green)">
+      <div style="font-size:9px;color:#aaa;margin-bottom:3px;letter-spacing:1px">للمعلومات فقط</div>
+      <div class="fc-lbl">✅ طلبات تم تسليمها</div>
+      <div class="fc-val" style="color:var(--green)">${finalDeliveredAmt.toLocaleString()} <small>ر.س</small></div>
+      <div class="fc-sub">${finalDeliveredCount} طلب</div>
     </div>
     <div class="fin-card" style="border-top:3px solid var(--green)">
       <div class="fc-lbl">💰 إجمالي الدخل</div>
@@ -2667,7 +2740,7 @@ function renderReports(){
           </table>
         </div>
       </details>`;
-    }).join('')||'<div style="color:var(--gr);padding:12px;text-align:center">لا توجد تسليمات في هذه الفترة</div>';
+    }).join('')||'<div style="color:var(--gr);padding:12px;text-align:center">لا توجد تسليمات قديمة في هذه الفترة</div>';
   }
 
   // ===== المصروفات بأكورديون حسب الشهر واليوم =====
@@ -2722,6 +2795,43 @@ function renderReports(){
     if(totalEl)totalEl.textContent=totalFiltered.toLocaleString()+' ر.س';
     if(countEl)countEl.textContent=filtExp.length;
   }
+  // ===== كشف الحركات المالية =====
+  const movTbl=document.getElementById('financialMovementTbl');
+  if(movTbl){
+    const movements=[];
+    // العربون من الطلبات
+    fOrders.forEach(o=>{
+      if(o.deposit>0&&o.orderDate&&dateInRange(o.orderDate,from,to)){
+        movements.push({date:o.orderDate,type:'عربون',sysId:o.id,localId:o.localInvoice||'-',client:o.client,amount:o.deposit});
+      }
+      // الدفعات الجزئية
+      (o.partials||[]).forEach((p,i)=>{
+        if(!p.date||!dateInRange(p.date,from,to))return;
+        const isFinal=p.isFinalDelivery===true;
+        const typeLabel=isFinal?'تسليم نهائي':`دفعة ${i+1}`;
+        movements.push({date:p.date,type:typeLabel,sysId:o.id,localId:o.localInvoice||'-',client:o.client,amount:p.amount||0});
+      });
+    });
+    // التسليمات القديمة
+    fDeliveries.forEach(d=>{
+      movements.push({date:d.date,type:'تسليم قديم',sysId:'-',localId:d.localInvoice||'-',client:d.client,amount:d.receivedAmount||0});
+    });
+    // ترتيب حسب التاريخ
+    movements.sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const typeColors={'عربون':'var(--gold)','تسليم نهائي':'var(--green)','تسليم قديم':'var(--blue)'};
+    movTbl.innerHTML=movements.map(m=>`<tr>
+      <td style="color:var(--gr);font-size:11px">${m.date}</td>
+      <td><span class="badge" style="background:${typeColors[m.type]||'var(--d4)'};color:white;padding:3px 7px;border-radius:2px;font-size:10px">${m.type}</span></td>
+      <td style="color:var(--gold);font-weight:700">${m.sysId!=='-'?'#'+m.sysId:'-'}</td>
+      <td style="color:var(--gr);font-size:11px">${m.localId}</td>
+      <td>${m.client}</td>
+      <td style="font-weight:700;color:var(--green)">${m.amount.toLocaleString()} ر.س</td>
+    </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--gr)">لا توجد حركات في هذه الفترة</td></tr>';
+    const movTotal=movements.reduce((s,m)=>s+m.amount,0);
+    const movTotalEl=document.getElementById('financialMovementTotal');
+    if(movTotalEl)movTotalEl.textContent=movTotal.toLocaleString()+' ر.س';
+  }
+
   const empData={};fOrders.forEach(o=>{const e=o.employee||'غير محدد';if(!empData[e])empData[e]={count:0,sales:0,collected:0,remaining:0};empData[e].count++;empData[e].sales+=calcFinal(o);empData[e].collected+=calcPaid(o);empData[e].remaining+=Math.max(0,calcRem(o));});
   const ert=document.getElementById('empRepTbl');if(ert)ert.innerHTML=Object.entries(empData).map(([e,d])=>`<tr><td style="font-weight:700">${e}</td><td style="color:var(--blue)">${d.count}</td><td style="color:var(--gold)">${d.sales.toLocaleString()} ر.س</td><td style="color:var(--green)">${d.collected.toLocaleString()} ر.س</td><td style="color:${d.remaining>0?'var(--red)':' var(--green)'}">${d.remaining.toLocaleString()} ر.س</td></tr>`).join('');
   const months=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
@@ -3146,7 +3256,7 @@ function openCustomRoleModal(){
         </div>
         <div class="fg" style="margin-top:10px"><label>إضافة صلاحيات خاصة</label>
           <div style="display:grid;gap:6px;margin-top:6px">
-            ${[{id:'canAddOrder',label:'إضافة طلبات'},{id:'canEditDelivery',label:'تعديل موعد الاستلام'},{id:'canUpdateTracking',label:'تحديث التتبع'},{id:'canAddDelivery',label:'إدخال التسليمات'},{id:'canEditDeliveryRecord',label:'تعديل التسليمات'},{id:'canViewMeasurements',label:'رؤية المقاسات'},{id:'canViewInvoiceAmount',label:'رؤية الفاتورة بالمبلغ'},{id:'canEditOrders',label:'تعديل الطلبات'},{id:'canEditExpenses',label:'تعديل المصروفات'},{id:'canEditReturns',label:'تعديل المرتجعات'},{id:'canEditSalaries',label:'تعديل الرواتب'},{id:'canEditAttendance',label:'تعديل الحضور'},{id:'canViewAmounts',label:'رؤية المبالغ والإيرادات'}].map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="crperm-${p.id}" style="width:auto"> ${p.label}</label>`).join('')}
+            ${[{id:'canAddOrder',label:'إضافة طلبات'},{id:'canEditDelivery',label:'تعديل موعد الاستلام'},{id:'canUpdateTracking',label:'تحديث التتبع'},{id:'canAddDelivery',label:'إدخال تسليمات قديمة'},{id:'canEditDeliveryRecord',label:'تعديل تسليمات قديمة'},{id:'canViewMeasurements',label:'رؤية المقاسات'},{id:'canViewInvoiceAmount',label:'رؤية الفاتورة بالمبلغ'},{id:'canEditOrders',label:'تعديل الطلبات'},{id:'canEditExpenses',label:'تعديل المصروفات'},{id:'canEditReturns',label:'تعديل المرتجعات'},{id:'canEditSalaries',label:'تعديل الرواتب'},{id:'canEditAttendance',label:'تعديل الحضور'},{id:'canViewAmounts',label:'رؤية المبالغ والإيرادات'}].map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="crperm-${p.id}" style="width:auto"> ${p.label}</label>`).join('')}
           </div>
         </div>
       </div>
@@ -3244,7 +3354,7 @@ function renderDeliveries(){
       <td style="font-weight:900;color:var(--green)">${total.toLocaleString()} ر.س</td>
       <td colspan="3"></td>
     </tr>`
-  ].join('')||'<tr><td colspan="8" style="text-align:center;padding:22px;color:var(--gr)">لا توجد تسليمات</td></tr>';
+  ].join('')||'<tr><td colspan="8" style="text-align:center;padding:22px;color:var(--gr)">لا توجد تسليمات قديمة</td></tr>';
 }
 
 function openDeliveryModal(){
