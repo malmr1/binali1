@@ -475,14 +475,14 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       </div>
 
       <!-- الكشف التفصيلي -->
-      <div class="sec-hdr"><div class="sec-ttl">📋 الكشف التفصيلي للطلبات والتسليمات</div></div>
+      <div class="sec-hdr"><div class="sec-ttl">📋 الكشف التفصيلي للطلبات والتسليمات القديمة</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
         <div>
           <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:8px">الطلبات</div>
           <div id="ordersDetailAccordion"></div>
         </div>
         <div>
-          <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:8px">💰 حركة الدخل (تسليمات قديمة + طلبات مسلّمة)</div>
+          <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:8px">تسليمات قديمة</div>
           <div id="deliveriesDetailAccordion"></div>
         </div>
       </div>
@@ -2710,73 +2710,37 @@ function renderReports(){
     }).join('')||'<div style="color:var(--gr);padding:12px;text-align:center">لا توجد طلبات في هذه الفترة</div>';
   }
 
-  // ===== الكشف التفصيلي - التسليمات (قديمة + طلبات مسلّمة) =====
+  // ===== الكشف التفصيلي - التسليمات =====
   const delAcc=document.getElementById('deliveriesDetailAccordion');
   if(delAcc){
-    // نجمع كل سجلات الدخل الفعلي بتاريخها الحقيقي
-    const allDeliveryRows=[];
-
-    // التسليمات القديمة — كل دفعة بتاريخها
-    fDeliveries.forEach(d=>{
-      const parts=d.partials||[];
-      const partsTotal=parts.reduce((s,p)=>s+(p.amount||0),0);
-      const initial=Math.max(0,(d.receivedAmount||0)-partsTotal);
-      if(initial>0){
-        allDeliveryRows.push({date:d.date,client:d.client,label:'تسليم قديم',amount:initial,payMethod:d.payMethod||'-',ref:'',type:'old'});
-      }
-      parts.forEach(p=>{
-        allDeliveryRows.push({date:p.date||d.date,client:d.client,label:'تسليم قديم - دفعة',amount:p.amount||0,payMethod:p.payMethod||'-',ref:'',type:'old'});
-      });
-    });
-
-    // الطلبات المسلّمة — كل دفعة بتاريخها الفعلي
-    db.orders.filter(o=>!o.isDraft&&o.finalDeliveryDate&&dateInRange(o.finalDeliveryDate,from,to)).forEach(o=>{
-      // العربون بتاريخ الطلب
-      if((o.deposit||0)>0){
-        allDeliveryRows.push({date:o.orderDate,client:o.client,label:`#${o.id} عربون`,amount:o.deposit,payMethod:o.payMethod||'-',ref:`#${o.id}`,type:'order'});
-      }
-      // الدفعات بتواريخها
-      (o.partials||[]).forEach(p=>{
-        const isDelivery=p.isDelivery||false;
-        allDeliveryRows.push({date:p.date||o.orderDate,client:o.client,label:`#${o.id} ${isDelivery?'تسليم نهائي':'دفعة'}`,amount:p.amount||0,payMethod:p.payMethod||'-',ref:`#${o.id}`,type:isDelivery?'delivery':'order'});
-      });
-    });
-
-    // تجميع حسب الشهر
     const delByMonth={};
-    allDeliveryRows.filter(r=>r.amount>0&&dateInRange(r.date,from,to)).forEach(r=>{
-      const dt=new Date(r.date);
+    fDeliveries.forEach(d=>{
+      const dt=new Date(d.date);
       const key=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
       if(!delByMonth[key])delByMonth[key]=[];
-      delByMonth[key].push(r);
+      delByMonth[key].push(d);
     });
-
-    const typeColor={old:'var(--gr)',order:'var(--blue)',delivery:'var(--green)'};
-    const typeLabel={old:'قديم',order:'طلب',delivery:'تسليم'};
-
     delAcc.innerHTML=Object.keys(delByMonth).sort().reverse().map(month=>{
-      const rows=delByMonth[month].sort((a,b)=>new Date(b.date)-new Date(a.date));
+      const rows=delByMonth[month];
       const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
-      const mTotal=rows.reduce((s,r)=>s+r.amount,0);
+      const mTotal=rows.reduce((s,d)=>s+(d.receivedAmount||0),0);
       return`<details style="margin-bottom:6px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
         <summary style="padding:9px 12px;cursor:pointer;font-size:12px;font-weight:700;color:var(--gold);display:flex;justify-content:space-between">
-          <span>${mLabel}</span><span style="color:var(--gr)">${rows.length} حركة · ${mTotal.toLocaleString()} ر.س</span>
+          <span>${mLabel}</span><span style="color:var(--gr)">${rows.length} تسليم · ${mTotal.toLocaleString()} ر.س</span>
         </summary>
         <div style="overflow-x:auto">
           <table style="width:100%;font-size:11px">
-            <thead><tr><th>العميل</th><th>البيان</th><th>النوع</th><th>المبلغ</th><th>طريقة الدفع</th><th>التاريخ</th></tr></thead>
-            <tbody>${rows.map(r=>`<tr>
-              <td style="font-weight:700">${r.client}</td>
-              <td style="color:var(--gold)">${r.label}</td>
-              <td><span style="font-size:10px;padding:2px 6px;border-radius:2px;background:var(--d4);color:${typeColor[r.type]}">${typeLabel[r.type]}</span></td>
-              <td style="font-weight:700;color:var(--green)">${r.amount.toLocaleString()} ر.س</td>
-              <td style="color:var(--gr)">${r.payMethod}</td>
-              <td style="color:var(--gr)">${r.date||'-'}</td>
+            <thead><tr><th>العميل</th><th>المبلغ</th><th>طريقة الدفع</th><th>التاريخ</th></tr></thead>
+            <tbody>${rows.map(d=>`<tr>
+              <td>${d.client}</td>
+              <td style="font-weight:700">${(d.receivedAmount||0).toLocaleString()} ر.س</td>
+              <td style="color:var(--gr)">${d.payMethod||'-'}</td>
+              <td style="color:var(--gr)">${d.date||'-'}</td>
             </tr>`).join('')}</tbody>
           </table>
         </div>
       </details>`;
-    }).join('')||'<div style="color:var(--gr);padding:12px;text-align:center">لا توجد تسليمات في هذه الفترة</div>';
+    }).join('')||'<div style="color:var(--gr);padding:12px;text-align:center">لا توجد تسليمات قديمة في هذه الفترة</div>';
   }
 
   // ===== المصروفات بأكورديون حسب الشهر واليوم =====
