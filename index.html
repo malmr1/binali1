@@ -424,13 +424,16 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
         </div>
       </div>
       <div id="myPayInfo" style="display:none;margin-bottom:16px"></div>
-      <div class="tw">
-        <div class="filters">
-          <select class="fi" id="salEmpF" onchange="renderSalaries()"><option value="">كل الموظفين</option></select>
-          <select class="fi" id="salTypeF" onchange="renderSalaries()"><option value="">الكل</option><option value="salary">رواتب</option><option value="withdrawal">سحبيات</option></select>
-          <select class="fi" id="salMonF" onchange="renderSalaries()"><option value="">كل الشهور</option></select>
-        </div>
-        <table><thead><tr><th>الموظف</th><th>النوع</th><th>الشهر</th><th>الراتب الأساسي</th><th>المبلغ</th><th>الملاحظات</th><th>التاريخ</th><th>بواسطة</th><th>إجراءات</th></tr></thead><tbody id="salTbl"></tbody></table>
+      <div class="filters" style="margin-bottom:10px">
+        <input class="fi" id="salSearch" placeholder="🔍 بحث باسم الموظف..." oninput="renderSalaries()" style="min-width:180px">
+        <select class="fi" id="salEmpF" onchange="renderSalaries()"><option value="">كل الموظفين</option></select>
+        <select class="fi" id="salTypeF" onchange="renderSalaries()"><option value="">الكل</option><option value="salary">رواتب</option><option value="withdrawal">سحبيات</option></select>
+        <select class="fi" id="salMonF" onchange="renderSalaries()"><option value="">كل الشهور</option></select>
+      </div>
+      <div id="salAccordion"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-radius:2px;margin-top:6px;border-right:3px solid var(--green)">
+        <span style="font-size:12px;font-weight:700">المجموع</span>
+        <div><span id="salMainTotal" style="font-size:16px;font-weight:900;color:var(--green)">0</span> <span style="font-size:11px;color:var(--gr)">ر.س · <span id="salMainCount">0</span> سجل</span></div>
       </div>
     </div>
 
@@ -439,7 +442,18 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       <div class="topbar"><div><div class="pg-title">المصروفات</div></div>
         <button class="btn-add" onclick="openExpModal()">+ إضافة مصروف</button>
       </div>
-      <div class="tw"><table><thead><tr><th>#</th><th>التاريخ</th><th>البند الرئيسي</th><th>البند الفرعي</th><th>الوصف</th><th>المبلغ</th><th>إجراءات</th></tr></thead><tbody id="expTbl"></tbody></table></div>
+      <div class="filters" style="margin-bottom:10px">
+        <input class="fi" id="expSearch" placeholder="🔍 بحث في الوصف أو البند..." oninput="renderExpenses()" style="min-width:200px">
+        <select class="fi" id="expCatF" onchange="renderExpenses()"><option value="">كل البنود الرئيسية</option></select>
+        <select class="fi" id="expSubF" onchange="renderExpenses()"><option value="">كل البنود الفرعية</option></select>
+        <input type="date" class="fi" id="expFromF" onchange="renderExpenses()">
+        <input type="date" class="fi" id="expToF" onchange="renderExpenses()">
+      </div>
+      <div id="expAccordionMain"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-radius:2px;margin-top:6px;border-right:3px solid var(--red)">
+        <span style="font-size:12px;font-weight:700">المجموع</span>
+        <div><span id="expMainTotal" style="font-size:16px;font-weight:900;color:var(--red)">0</span> <span style="font-size:11px;color:var(--gr)">ر.س · <span id="expMainCount">0</span> عملية</span></div>
+      </div>
     </div>
 
     <!-- RETURNS -->
@@ -2100,20 +2114,57 @@ function renderSalaries(){
       </div>`;
     }
   }
-  document.getElementById('salTbl').innerHTML=list.map(s=>`<tr>
-    <td style="font-weight:600">${s.empName}</td>
-    <td><span class="badge ${s.type==='salary'?'b-green':'b-orange'}">${s.type==='salary'?'راتب':'سحبية'}</span></td>
-    <td>${s.month||'-'}</td>
-    <td style="color:var(--gr)">${(s.baseSalary||0).toLocaleString()} ر.س</td>
-    <td style="font-weight:700;color:${s.type==='salary'?'var(--green)':'var(--orange)'}">${(s.amount||0).toLocaleString()} ر.س</td>
-    <td style="color:var(--gr)">${s.notes||'-'}</td>
-    <td>${s.date||''}</td>
-    <td style="color:var(--gr);font-size:10px">${s.createdBy||''}</td>
-    <td><div style="display:flex;gap:4px">
-      ${(currentUser.role==='manager'||canDo('canEditSalaries'))?`<button class="btn-sm blue" onclick="openEditSalary(${s.id})">تعديل</button>`:''}
-      ${currentUser.role==='manager'?`<button class="btn-sm red" onclick="deleteSalary(${s.id})">حذف</button>`:''}
-    </div></td>
-  </tr>`).join('')||'<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--gr)">لا توجد سجلات</td></tr>';
+  // بحث
+  const salSearch=(document.getElementById('salSearch')?.value||'').toLowerCase();
+  if(salSearch)list=list.filter(s=>(s.empName||'').toLowerCase().includes(salSearch));
+  // تجميع بالشهر
+  const byMonth={};
+  list.forEach(s=>{
+    const key=s.month||s.date?.slice(0,7)||'غير محدد';
+    if(!byMonth[key])byMonth[key]={rows:[],totalSal:0,totalWith:0};
+    byMonth[key].rows.push(s);
+    if(s.type==='salary')byMonth[key].totalSal+=(s.amount||0);
+    else byMonth[key].totalWith+=(s.amount||0);
+  });
+  const canEdit=currentUser.role==='manager'||canDo('canEditSalaries');
+  const canDel=currentUser.role==='manager';
+  const acc=document.getElementById('salAccordion');
+  if(acc){
+    acc.innerHTML=Object.keys(byMonth).sort().reverse().map(month=>{
+      const mData=byMonth[month];
+      const rowsHtml=mData.rows.map(s=>`<tr>
+        <td style="font-weight:600">${s.empName}</td>
+        <td><span class="badge ${s.type==='salary'?'b-green':'b-orange'}">${s.type==='salary'?'راتب':'سحبية'}</span></td>
+        <td>${s.month||'-'}</td>
+        <td style="color:var(--gr)">${(s.baseSalary||0).toLocaleString()} ر.س</td>
+        <td style="font-weight:700;color:${s.type==='salary'?'var(--green)':'var(--orange)'}">${(s.amount||0).toLocaleString()} ر.س</td>
+        <td style="color:var(--gr)">${s.notes||'-'}</td>
+        <td>${s.date||''}</td>
+        <td style="color:var(--gr);font-size:10px">${s.createdBy||''}</td>
+        <td><div style="display:flex;gap:4px">
+          ${canEdit?`<button class="btn-sm blue" onclick="openEditSalary(${s.id})">تعديل</button>`:''}
+          ${canDel?`<button class="btn-sm red" onclick="deleteSalary(${s.id})">حذف</button>`:''}
+        </div></td>
+      </tr>`).join('');
+      return`<details open style="margin-bottom:8px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
+        <summary style="padding:9px 14px;cursor:pointer;font-size:12px;font-weight:700;display:flex;justify-content:space-between;list-style:none">
+          <span style="color:var(--gold)">${month}</span>
+          <span style="font-size:11px;color:var(--gr)">رواتب: <span style="color:var(--green)">${mData.totalSal.toLocaleString()}</span> · سحبيات: <span style="color:var(--orange)">${mData.totalWith.toLocaleString()}</span></span>
+        </summary>
+        <div style="overflow-x:auto">
+          <table style="width:100%;font-size:11px">
+            <thead><tr><th>الموظف</th><th>النوع</th><th>الشهر</th><th>الأساسي</th><th>المبلغ</th><th>ملاحظات</th><th>التاريخ</th><th>بواسطة</th><th>إجراءات</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      </details>`;
+    }).join('')||'<div style="text-align:center;padding:22px;color:var(--gr)">لا توجد سجلات</div>';
+  }
+  const total=list.reduce((s,x)=>s+(x.amount||0),0);
+  const totalEl=document.getElementById('salMainTotal');
+  const countEl=document.getElementById('salMainCount');
+  if(totalEl)totalEl.textContent=total.toLocaleString();
+  if(countEl)countEl.textContent=list.length;
 }
 
 function openSalaryModal(){
@@ -2262,17 +2313,87 @@ async function saveMultiWithdraw(){
 
 // ===== EXPENSES =====
 function renderExpenses(){
-  document.getElementById('expTbl').innerHTML=db.expenses.map((e,i)=>`<tr>
-    <td>${i+1}</td><td>${e.date}</td>
-    <td><span class="badge b-gold">${e.catMain||'-'}</span></td>
-    <td>${e.catSub||'-'}</td>
-    <td>${e.description||'-'}</td>
-    <td style="color:var(--red);font-weight:700">${(e.amount||0).toLocaleString()} ر.س</td>
-    <td><div style="display:flex;gap:4px">
-      ${(currentUser.role==='manager'||canDo('canEditExpenses'))?`<button class="btn-sm blue" onclick="openEditExpense(${e.id})">تعديل</button>`:''}
-      ${currentUser.role==='manager'?`<button class="btn-sm red" onclick="deleteExpense(${e.id})">حذف</button>`:''}
-    </div></td>
-  </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;padding:22px;color:var(--gr)">لا توجد مصروفات</td></tr>';
+  const catF=document.getElementById('expCatF');
+  const subF=document.getElementById('expSubF');
+  const search=(document.getElementById('expSearch')?.value||'').toLowerCase();
+  const fromF=document.getElementById('expFromF')?.value;
+  const toF=document.getElementById('expToF')?.value;
+  const selCat=catF?.value||'';
+  const selSub=subF?.value||'';
+  // ملء الفلاتر
+  if(catF){
+    const cats=[...new Set(db.expenses.map(e=>e.catMain||'غير محدد'))].sort();
+    const prev=catF.value;
+    catF.innerHTML='<option value="">كل البنود الرئيسية</option>'+cats.map(c=>`<option value="${c}" ${c===prev?'selected':''}>${c}</option>`).join('');
+  }
+  if(subF){
+    const subs=[...new Set(db.expenses.filter(e=>!selCat||(e.catMain||'غير محدد')===selCat).map(e=>e.catSub||''))].filter(Boolean).sort();
+    const prev=subF.value;
+    subF.innerHTML='<option value="">كل البنود الفرعية</option>'+subs.map(s=>`<option value="${s}" ${s===prev?'selected':''}>${s}</option>`).join('');
+  }
+  // فلتر البيانات
+  let list=db.expenses.filter(e=>(e.amount||0)>0);
+  if(selCat)list=list.filter(e=>(e.catMain||'غير محدد')===selCat);
+  if(selSub)list=list.filter(e=>(e.catSub||'')===selSub);
+  if(search)list=list.filter(e=>(e.description||'').toLowerCase().includes(search)||(e.catMain||'').toLowerCase().includes(search)||(e.catSub||'').toLowerCase().includes(search));
+  if(fromF)list=list.filter(e=>e.date&&e.date>=fromF);
+  if(toF)list=list.filter(e=>e.date&&e.date<=toF);
+  // تجميع حسب الشهر ثم اليوم
+  const byMonth={};
+  list.forEach(e=>{
+    const d=new Date(e.date||'2000-01-01');
+    const mKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const dKey=e.date;
+    if(!byMonth[mKey])byMonth[mKey]={days:{},total:0,count:0};
+    if(!byMonth[mKey].days[dKey])byMonth[mKey].days[dKey]=[];
+    byMonth[mKey].days[dKey].push(e);
+    byMonth[mKey].total+=(e.amount||0);
+    byMonth[mKey].count++;
+  });
+  const canEdit=currentUser.role==='manager'||canDo('canEditExpenses');
+  const canDel=currentUser.role==='manager';
+  const acc=document.getElementById('expAccordionMain');
+  if(acc){
+    acc.innerHTML=Object.keys(byMonth).sort().reverse().map(month=>{
+      const mData=byMonth[month];
+      const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+      const daysHtml=Object.keys(mData.days).sort().reverse().map(day=>{
+        const rows=mData.days[day];
+        const dayTotal=rows.reduce((s,e)=>s+(e.amount||0),0);
+        return`<details style="margin-bottom:3px;background:var(--d4);border-radius:2px">
+          <summary style="padding:7px 12px;cursor:pointer;font-size:11px;display:flex;justify-content:space-between;list-style:none">
+            <span style="color:var(--white)">${day}</span>
+            <span style="color:var(--red);font-weight:700">${dayTotal.toLocaleString()} ر.س <span style="color:var(--gr);font-weight:400">(${rows.length})</span></span>
+          </summary>
+          <table style="width:100%;font-size:11px">
+            <thead><tr><th>البند الرئيسي</th><th>البند الفرعي</th><th>الوصف</th><th>المبلغ</th><th>إجراءات</th></tr></thead>
+            <tbody>${rows.map(e=>`<tr>
+              <td><span class="badge b-gold">${e.catMain||'-'}</span></td>
+              <td style="color:var(--gr)">${e.catSub||'-'}</td>
+              <td style="font-size:10px">${e.description||'-'}</td>
+              <td style="color:var(--red);font-weight:700">${(e.amount||0).toLocaleString()} ر.س</td>
+              <td><div style="display:flex;gap:4px">
+                ${canEdit?`<button class="btn-sm blue" onclick="openEditExpense(${e.id})">تعديل</button>`:''}
+                ${canDel?`<button class="btn-sm red" onclick="deleteExpense(${e.id})">حذف</button>`:''}
+              </div></td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </details>`;
+      }).join('');
+      return`<details open style="margin-bottom:8px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
+        <summary style="padding:9px 14px;cursor:pointer;font-size:12px;font-weight:700;color:var(--red);display:flex;justify-content:space-between;list-style:none">
+          <span style="color:var(--white)">${mLabel}</span>
+          <span>${mData.total.toLocaleString()} ر.س <span style="color:var(--gr);font-weight:400;font-size:11px">(${mData.count} عملية)</span></span>
+        </summary>
+        <div style="padding:6px 8px">${daysHtml}</div>
+      </details>`;
+    }).join('')||'<div style="text-align:center;padding:22px;color:var(--gr)">لا توجد مصروفات</div>';
+  }
+  const total=list.reduce((s,e)=>s+(e.amount||0),0);
+  const totalEl=document.getElementById('expMainTotal');
+  const countEl=document.getElementById('expMainCount');
+  if(totalEl)totalEl.textContent=total.toLocaleString();
+  if(countEl)countEl.textContent=list.length;
 }
 
 function openExpModal(){
@@ -2576,8 +2697,19 @@ function renderReports(){
     </div>
     <div class="fin-card" style="border-top:2px solid rgba(180,180,180,.4)">
       <div style="font-size:9px;color:#aaa;margin-bottom:3px;letter-spacing:1px">للمعلومات فقط</div>
-      <div class="fc-lbl">المتبقي غير المحصل</div>
-      <div class="fc-val" style="color:var(--orange)">${uncollected.toLocaleString()} <small>ر.س</small></div>
+      <div class="fc-lbl">الطلبات</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+        <div style="background:var(--d4);padding:7px;border-radius:2px;text-align:center">
+          <div style="font-size:9px;color:var(--gr);margin-bottom:3px">المحصّل</div>
+          <div style="font-size:15px;font-weight:800;color:var(--green)">${(salesInfo-uncollected).toLocaleString()}</div>
+          <div style="font-size:9px;color:var(--gr)">ر.س</div>
+        </div>
+        <div style="background:var(--d4);padding:7px;border-radius:2px;text-align:center">
+          <div style="font-size:9px;color:var(--gr);margin-bottom:3px">غير محصّل</div>
+          <div style="font-size:15px;font-weight:800;color:var(--orange)">${uncollected.toLocaleString()}</div>
+          <div style="font-size:9px;color:var(--gr)">${fOrders.filter(o=>calcRem(o)>0).length} طلب</div>
+        </div>
+      </div>
     </div>
     <div class="fin-card" style="border-top:2px solid rgba(180,180,180,.4)">
       <div style="font-size:9px;color:#aaa;margin-bottom:3px;letter-spacing:1px">للمعلومات فقط</div>
@@ -2684,9 +2816,11 @@ function renderReports(){
   // ===== الكشف التفصيلي - الطلبات =====
   const ordAcc=document.getElementById('ordersDetailAccordion');
   if(ordAcc){
-    // تجميع حسب الشهر
+    // تجميع حسب الشهر مع ترتيب بالتاريخ
     const ordByMonth={};
-    fOrders.forEach(o=>{
+    const allPeriodOrders=db.orders.filter(o=>!o.isDraft&&o.orderDate&&dateInRange(o.orderDate,from,to));
+    allPeriodOrders.sort((a,b)=>new Date(a.orderDate)-new Date(b.orderDate));
+    allPeriodOrders.forEach(o=>{
       const d=new Date(o.orderDate);
       const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       if(!ordByMonth[key])ordByMonth[key]=[];
@@ -2697,14 +2831,15 @@ function renderReports(){
       const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const mTotal=rows.reduce((s,o)=>s+(o.amount||0),0);
       return`<details style="margin-bottom:6px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
-        <summary style="padding:9px 12px;cursor:pointer;font-size:12px;font-weight:700;color:var(--gold);display:flex;justify-content:space-between">
+        <summary style="padding:9px 12px;cursor:pointer;font-size:12px;font-weight:700;color:var(--gold);display:flex;justify-content:space-between;list-style:none">
           <span>${mLabel}</span><span style="color:var(--gr)">${rows.length} طلب · ${mTotal.toLocaleString()} ر.س</span>
         </summary>
         <div style="overflow-x:auto">
           <table style="width:100%;font-size:11px">
-            <thead><tr><th>رقم النظام</th><th>العميل</th><th>المنتج</th><th>المبلغ</th><th>الحالة</th><th>التاريخ</th></tr></thead>
+            <thead><tr><th>رقم النظام</th><th>رقم المحل</th><th>العميل</th><th>المنتج</th><th>المبلغ</th><th>الحالة</th><th>التاريخ</th></tr></thead>
             <tbody>${rows.map(o=>`<tr>
               <td style="color:var(--gold)">#${o.id}</td>
+              <td style="color:var(--gr)">${o.localInvoice||'-'}</td>
               <td>${o.client}</td>
               <td style="color:var(--gr)">${o.dressType||'-'}</td>
               <td style="font-weight:700">${(o.amount||0).toLocaleString()} ر.س</td>
@@ -2835,15 +2970,48 @@ function renderReports(){
     });
     // ترتيب حسب التاريخ
     movements.sort((a,b)=>new Date(a.date)-new Date(b.date));
-    const typeColors={'عربون':'#c9a84c','تسليم نهائي':'#27ae60','تسليم قديم':'#2980b9','دفعة 1':'#666','تأمين محصّل':'#2980b9'};
-    movTbl.innerHTML=movements.map(m=>`<tr>
-      <td style="color:var(--gr);font-size:11px;white-space:nowrap">${m.date}</td>
-      <td><span style="background:${typeColors[m.type]||'#555'};color:white;padding:3px 8px;border-radius:2px;font-size:10px;white-space:nowrap">${m.type}</span></td>
-      <td style="color:var(--gold);font-weight:700">${m.sysId!=='-'?'#'+m.sysId:'-'}</td>
-      <td style="color:var(--gr);font-size:11px">${m.localId}</td>
-      <td style="font-weight:600">${m.client}</td>
-      <td style="font-weight:700;color:var(--green);white-space:nowrap">${m.amount.toLocaleString()} ر.س</td>
-    </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--gr)">لا توجد حركات في هذه الفترة</td></tr>';
+    // تجميع الحركات حسب الشهر ثم اليوم
+    const movByMonth={};
+    movements.forEach(m=>{
+      const d=new Date(m.date||'2000-01-01');
+      const mKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      if(!movByMonth[mKey])movByMonth[mKey]={days:{},total:0};
+      if(!movByMonth[mKey].days[m.date])movByMonth[mKey].days[m.date]=[];
+      movByMonth[mKey].days[m.date].push(m);
+      movByMonth[mKey].total+=m.amount;
+    });
+    const typeColors={'عربون':'#c9a84c','تسليم نهائي':'#27ae60','تسليم قديم':'#2980b9','تأمين محصّل':'#2980b9'};
+    movTbl.closest('table').parentElement.innerHTML=Object.keys(movByMonth).sort().map(month=>{
+      const mData=movByMonth[month];
+      const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+      const daysHtml=Object.keys(mData.days).sort().map(day=>{
+        const rows=mData.days[day];
+        const dayTotal=rows.reduce((s,m)=>s+m.amount,0);
+        return`<details style="margin-bottom:3px;background:var(--d4);border-radius:2px">
+          <summary style="padding:7px 12px;cursor:pointer;font-size:11px;display:flex;justify-content:space-between;list-style:none">
+            <span style="color:var(--white)">${day}</span>
+            <span style="color:var(--green);font-weight:700">${dayTotal.toLocaleString()} ر.س <span style="color:var(--gr);font-weight:400">(${rows.length})</span></span>
+          </summary>
+          <table style="width:100%;font-size:11px">
+            <thead><tr><th>النوع</th><th>رقم النظام</th><th>رقم المحل</th><th>العميل</th><th>المبلغ</th></tr></thead>
+            <tbody>${rows.map(m=>`<tr>
+              <td><span style="background:${typeColors[m.type]||'#555'};color:white;padding:2px 7px;border-radius:2px;font-size:10px">${m.type}</span></td>
+              <td style="color:var(--gold);font-weight:700">${m.sysId!=='-'?'#'+m.sysId:'-'}</td>
+              <td style="color:var(--gr)">${m.localId}</td>
+              <td>${m.client}</td>
+              <td style="font-weight:700;color:var(--green)">${m.amount.toLocaleString()} ر.س</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </details>`;
+      }).join('');
+      return`<details open style="margin-bottom:8px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
+        <summary style="padding:9px 14px;cursor:pointer;font-size:12px;font-weight:700;color:var(--green);display:flex;justify-content:space-between;list-style:none">
+          <span style="color:var(--white)">${mLabel}</span>
+          <span>${mData.total.toLocaleString()} ر.س</span>
+        </summary>
+        <div style="padding:6px 8px">${daysHtml}</div>
+      </details>`;
+    }).join('')||'<div style="text-align:center;padding:18px;color:var(--gr)">لا توجد حركات في هذه الفترة</div>';
     const movTotal=movements.reduce((s,m)=>s+m.amount,0);
     const movTotalEl=document.getElementById('financialMovementTotal');
     if(movTotalEl)movTotalEl.textContent=movTotal.toLocaleString()+' ر.س';
@@ -3408,7 +3576,9 @@ function openDeliveryModal(){
           <select id="dPay" onchange="toggleDelTransfer(this.value)">${getPayOpts()}</select>
         </div>
         <div id="dTransferNote" style="display:none">
-          <div class="fg"><label>📋 ملاحظة التحويل (اسم المحوَّل إليه)</label><input type="text" id="dTransferTo" placeholder="مثال: محمد / حساب الشركة"></div>
+          <div class="fg"><label>📲 المحوَّل إليه</label>
+            <select id="dTransferTo">${(cfg.transferRecipients||[]).map(r=>`<option>${r}</option>`).join('')}</select>
+          </div>
         </div>
         <div style="border-top:1px solid rgba(201,168,76,.1);padding-top:12px;margin-top:4px">
           <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:9px">🛡️ التأمين (اختياري)</div>
