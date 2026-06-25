@@ -526,15 +526,10 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 
       <!-- كشف الحركات المالية -->
       <div class="sec-hdr"><div class="sec-ttl">📊 كشف الحركات المالية</div></div>
-      <div class="tw" style="margin-bottom:18px">
-        <table>
-          <thead><tr><th>التاريخ</th><th>النوع</th><th>رقم النظام</th><th>رقم المحل</th><th>العميل</th><th>المبلغ</th></tr></thead>
-          <tbody id="financialMovementTbl"></tbody>
-        </table>
-        <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-top:1px solid var(--d4)">
-          <span style="font-size:12px;font-weight:700">إجمالي الدخل في الفترة</span>
-          <span id="financialMovementTotal" style="font-size:16px;font-weight:900;color:var(--green)">0 ر.س</span>
-        </div>
+      <div id="financialMovementAccordion" style="margin-bottom:8px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-radius:2px;margin-bottom:18px;border-right:3px solid var(--green)">
+        <span style="font-size:12px;font-weight:700">إجمالي الدخل في الفترة</span>
+        <span id="financialMovementTotal" style="font-size:16px;font-weight:900;color:var(--green)">0 ر.س</span>
       </div>
 
       <!-- التحليل الشهري -->
@@ -2938,8 +2933,8 @@ function renderReports(){
     if(countEl)countEl.textContent=filtExp.length;
   }
   // ===== كشف الحركات المالية =====
-  const movTbl=document.getElementById('financialMovementTbl');
-  if(movTbl){
+  const movAccEl=document.getElementById('financialMovementAccordion');
+  if(movAccEl){
     const movements=[];
     // نقرأ كل الطلبات (بدون فلتر تاريخ الطلب) لأن الدفعات ممكن تكون في أي تاريخ
     db.orders.filter(o=>!o.isDraft).forEach(o=>{
@@ -2981,7 +2976,8 @@ function renderReports(){
       movByMonth[mKey].total+=m.amount;
     });
     const typeColors={'عربون':'#c9a84c','تسليم نهائي':'#27ae60','تسليم قديم':'#2980b9','تأمين محصّل':'#2980b9'};
-    movTbl.closest('table').parentElement.innerHTML=Object.keys(movByMonth).sort().map(month=>{
+    const movAcc=document.getElementById('financialMovementAccordion');
+    if(movAcc)movAcc.innerHTML=Object.keys(movByMonth).sort().map(month=>{
       const mData=movByMonth[month];
       const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const daysHtml=Object.keys(mData.days).sort().map(day=>{
