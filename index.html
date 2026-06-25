@@ -2519,22 +2519,29 @@ function renderReports(){
   const fDeliveries=db.deliveries.filter(d=>{const dt=new Date(d.date);return dt>=from&&dt<=to;});
   // للمعلومات فقط
   const salesInfo=fOrders.reduce((s,o)=>s+(o.amount||0),0);
-  // الطلبات المسلّمة خلال الفترة (بتاريخ التسليم الفعلي)
+  // الطلبات المسلّمة خلال الفترة (بتاريخ التسليم الفعلي من زر التسليم النهائي)
   const finalDelivered=db.orders.filter(o=>o.finalDeliveryDate&&dateInRange(o.finalDeliveryDate,from,to));
-  const finalDeliveredAmt=finalDelivered.reduce((s,o)=>s+(o.amount||0),0);
+  // المبلغ الكلي للتسليمات النهائية = مجموع الدفعات النهائية
+  const finalDeliveredAmt=finalDelivered.reduce((s,o)=>{
+    const lastPartial=(o.partials||[]).filter(p=>p.isFinalDelivery);
+    return s+lastPartial.reduce((ss,p)=>ss+(p.amount||0),0);
+  },0);
   const finalDeliveredCount=finalDelivered.length;
   const uncollected=fOrders.reduce((s,o)=>s+Math.max(0,calcRem(o)),0);
   const returnsAmt=fReturns.reduce((s,r)=>s+(r.amount||0),0);
   const delivCount=fDeliveries.length;
 
-  // الدخل من expenses (قيم سالبة = دخل)
-  const incomeFromExp=expenseIncomeInRange(from,to);
-  // الدخل من البيانات القديمة في orders (دفعات وعربون غير مسجلة في expenses)
+  // الدخل من الطلبات (عربون + دفعات بتاريخها)
   const incomeFromOrders=orderPaymentsInRange(from,to);
-  // الدخل من التسليمات القديمة (غير مسجلة في expenses)
+  // الدخل من التسليمات القديمة
   const incomeFromDeliveries=deliveryIncomeInRange(from,to);
-  // إجمالي الدخل = من expenses + من البيانات القديمة
-  const totalIncome=incomeFromExp+incomeFromOrders+incomeFromDeliveries;
+  // التأمين المحصّل (من الطلبات والتسليمات) ضمن الفترة
+  const insIncomeOrders=db.orders.filter(o=>o.insurance>0&&o.insuranceCollected&&o.insuranceCollectDate&&dateInRange(o.insuranceCollectDate,from,to)).reduce((s,o)=>s+(o.insurance||0),0);
+  const insIncomeDeliveries=db.deliveries.filter(d=>d.insuranceAmount>0&&d.insuranceCollected&&d.insuranceCollectDate&&dateInRange(d.insuranceCollectDate,from,to)).reduce((s,d)=>s+(d.insuranceAmount||0),0);
+  const insIncomeTotal=insIncomeOrders+insIncomeDeliveries;
+  // الخرج من expenses فقط (مصروفات + استرداد تأمين)
+  // إجمالي الدخل
+  const totalIncome=incomeFromOrders+incomeFromDeliveries+insIncomeTotal;
 
   // الخرج من expenses (قيم موجبة = خرج)
   const totalExpenses=fExp.filter(e=>(e.amount||0)>0).reduce((s,e)=>s+(e.amount||0),0);
@@ -2799,33 +2806,43 @@ function renderReports(){
   const movTbl=document.getElementById('financialMovementTbl');
   if(movTbl){
     const movements=[];
-    // العربون من الطلبات
-    fOrders.forEach(o=>{
-      if(o.deposit>0&&o.orderDate&&dateInRange(o.orderDate,from,to)){
+    // نقرأ كل الطلبات (بدون فلتر تاريخ الطلب) لأن الدفعات ممكن تكون في أي تاريخ
+    db.orders.filter(o=>!o.isDraft).forEach(o=>{
+      // العربون - بتاريخ الطلب
+      if((o.deposit||0)>0&&o.orderDate&&dateInRange(o.orderDate,from,to)){
         movements.push({date:o.orderDate,type:'عربون',sysId:o.id,localId:o.localInvoice||'-',client:o.client,amount:o.deposit});
       }
-      // الدفعات الجزئية
+      // الدفعات - بتاريخ كل دفعة
       (o.partials||[]).forEach((p,i)=>{
-        if(!p.date||!dateInRange(p.date,from,to))return;
+        const pDate=p.date||o.orderDate;
+        if(!pDate||!dateInRange(pDate,from,to))return;
         const isFinal=p.isFinalDelivery===true;
         const typeLabel=isFinal?'تسليم نهائي':`دفعة ${i+1}`;
-        movements.push({date:p.date,type:typeLabel,sysId:o.id,localId:o.localInvoice||'-',client:o.client,amount:p.amount||0});
+        movements.push({date:pDate,type:typeLabel,sysId:o.id,localId:o.localInvoice||'-',client:o.client,amount:p.amount||0});
       });
     });
-    // التسليمات القديمة
-    fDeliveries.forEach(d=>{
+    // التسليمات القديمة - بتاريخ التسليم
+    db.deliveries.filter(d=>{const dt=new Date(d.date);return dt>=from&&dt<=to;}).forEach(d=>{
       movements.push({date:d.date,type:'تسليم قديم',sysId:'-',localId:d.localInvoice||'-',client:d.client,amount:d.receivedAmount||0});
+    });
+    // التأمين المحصّل من الطلبات ضمن الفترة
+    db.orders.filter(o=>o.insurance>0&&o.insuranceCollected&&o.insuranceCollectDate&&dateInRange(o.insuranceCollectDate,from,to)).forEach(o=>{
+      movements.push({date:o.insuranceCollectDate,type:'تأمين محصّل',sysId:o.id,localId:o.localInvoice||'-',client:o.client,amount:o.insurance||0});
+    });
+    // التأمين المحصّل من التسليمات القديمة
+    db.deliveries.filter(d=>d.insuranceAmount>0&&d.insuranceCollected&&d.insuranceCollectDate&&dateInRange(d.insuranceCollectDate,from,to)).forEach(d=>{
+      movements.push({date:d.insuranceCollectDate,type:'تأمين محصّل',sysId:'-',localId:d.localInvoice||'-',client:d.client,amount:d.insuranceAmount||0});
     });
     // ترتيب حسب التاريخ
     movements.sort((a,b)=>new Date(a.date)-new Date(b.date));
-    const typeColors={'عربون':'var(--gold)','تسليم نهائي':'var(--green)','تسليم قديم':'var(--blue)'};
+    const typeColors={'عربون':'#c9a84c','تسليم نهائي':'#27ae60','تسليم قديم':'#2980b9','دفعة 1':'#666','تأمين محصّل':'#2980b9'};
     movTbl.innerHTML=movements.map(m=>`<tr>
-      <td style="color:var(--gr);font-size:11px">${m.date}</td>
-      <td><span class="badge" style="background:${typeColors[m.type]||'var(--d4)'};color:white;padding:3px 7px;border-radius:2px;font-size:10px">${m.type}</span></td>
+      <td style="color:var(--gr);font-size:11px;white-space:nowrap">${m.date}</td>
+      <td><span style="background:${typeColors[m.type]||'#555'};color:white;padding:3px 8px;border-radius:2px;font-size:10px;white-space:nowrap">${m.type}</span></td>
       <td style="color:var(--gold);font-weight:700">${m.sysId!=='-'?'#'+m.sysId:'-'}</td>
       <td style="color:var(--gr);font-size:11px">${m.localId}</td>
-      <td>${m.client}</td>
-      <td style="font-weight:700;color:var(--green)">${m.amount.toLocaleString()} ر.س</td>
+      <td style="font-weight:600">${m.client}</td>
+      <td style="font-weight:700;color:var(--green);white-space:nowrap">${m.amount.toLocaleString()} ر.س</td>
     </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--gr)">لا توجد حركات في هذه الفترة</td></tr>';
     const movTotal=movements.reduce((s,m)=>s+m.amount,0);
     const movTotalEl=document.getElementById('financialMovementTotal');
@@ -2945,6 +2962,12 @@ function renderSettings(){
   let cards='';
   if(isManager){
     cards+=`
+    <div class="set-card" style="border-right:3px solid var(--orange)">
+      <div class="set-ttl">🔄 مزامنة التسليمات القديمة</div>
+      <div style="font-size:11px;color:var(--gr);margin-bottom:10px">للطلبات التي تم تسليمها يدوياً قبل إضافة زر التسليم النهائي — تستخدم مرة واحدة فقط</div>
+      <div id="syncStatusMsg" style="font-size:12px;margin-bottom:8px;min-height:20px"></div>
+      <button class="btn-sm" style="background:var(--orange);color:white;border:none" onclick="syncOldDeliveries()">🔄 مزامنة التسليمات القديمة</button>
+    </div>
     <div class="set-card">
       <div class="set-ttl">⚙️ بيانات المحل</div>
       <div class="fg"><label>اسم المحل</label><input type="text" id="sName" value="${cfg.shopName||''}"></div>
@@ -4758,6 +4781,45 @@ async function saveDelInsReturn(delId){
   await logAudit('استرداد تأمين تسليم','deliveries',delId,`${insAmt} ر.س`);
   await fetchAll();hideLoading();closeModal();renderDeliveries();
   showToast('✅ تم تسجيل الاسترداد كخرج','success');
+}
+
+// ===== مزامنة التسليمات القديمة =====
+async function syncOldDeliveries(){
+  const delivered=db.orders.filter(o=>
+    !o.isDraft &&
+    (o.status==='تم التسليم'||o.status==='الحمدلله') &&
+    !o.finalDeliveryDate &&
+    (o.partials||[]).length>0
+  );
+  if(!delivered.length){
+    document.getElementById('syncStatusMsg').innerHTML='<span style="color:var(--green)">✅ لا توجد طلبات تحتاج مزامنة</span>';
+    return;
+  }
+  const confirmed=confirm(`سيتم مزامنة ${delivered.length} طلب مسلّم.
+سيُحدَّد تاريخ آخر دفعة كتاريخ تسليم نهائي.
+هل تأكد؟`);
+  if(!confirmed)return;
+  showLoading('جاري المزامنة...');
+  let synced=0;
+  for(const o of delivered){
+    const partials=o.partials||[];
+    // آخر دفعة = تاريخ التسليم
+    const lastPartial=partials[partials.length-1];
+    if(!lastPartial)continue;
+    const finalDate=lastPartial.date||o.orderDate;
+    // وضع علامة isFinalDelivery على آخر دفعة
+    const updatedPartials=[...partials];
+    updatedPartials[updatedPartials.length-1]={...lastPartial,isFinalDelivery:true};
+    const{error}=await sb.from('orders').update({
+      final_delivery_date:finalDate,
+      partial_payments:updatedPartials
+    }).eq('id',o.dbId);
+    if(!error)synced++;
+  }
+  await fetchAll();
+  hideLoading();
+  document.getElementById('syncStatusMsg').innerHTML=`<span style="color:var(--green)">✅ تم مزامنة ${synced} طلب بنجاح</span>`;
+  showToast(`✅ تم مزامنة ${synced} طلب`,'success');
 }
 
 // ===== EXPORT EXCEL =====
