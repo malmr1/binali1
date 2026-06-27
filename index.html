@@ -526,10 +526,15 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 
       <!-- كشف الحركات المالية -->
       <div class="sec-hdr"><div class="sec-ttl">📊 كشف الحركات المالية</div></div>
-      <div id="financialMovementAccordion" style="margin-bottom:8px"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-radius:2px;margin-bottom:18px;border-right:3px solid var(--green)">
-        <span style="font-size:12px;font-weight:700">إجمالي الدخل في الفترة</span>
-        <span id="financialMovementTotal" style="font-size:16px;font-weight:900;color:var(--green)">0 ر.س</span>
+      <div class="tw" style="margin-bottom:18px">
+        <table>
+          <thead><tr><th>التاريخ</th><th>النوع</th><th>رقم النظام</th><th>رقم المحل</th><th>العميل</th><th>المبلغ</th></tr></thead>
+          <tbody id="financialMovementTbl"></tbody>
+        </table>
+        <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-top:1px solid var(--d4)">
+          <span style="font-size:12px;font-weight:700">إجمالي الدخل في الفترة</span>
+          <span id="financialMovementTotal" style="font-size:16px;font-weight:900;color:var(--green)">0 ر.س</span>
+        </div>
       </div>
 
       <!-- التحليل الشهري -->
@@ -714,6 +719,7 @@ async function fetchAll(){
     measurements:x.measurements||{},extraItems:x.extra_items||[],
     insuranceCollectTime:x.insurance_collect_time||'order',insuranceCollectOther:x.insurance_collect_other||'',
     insuranceCollected:x.insurance_collected||false,insuranceCollectDate:x.insurance_collect_date||'',
+    insuranceCancelled:x.insurance_cancelled||false,
     finalDeliveryDate:x.final_delivery_date||'',
   }));
   db.expenses=(e.data||[]).map(x=>({id:x.id,date:x.date,catMain:x.cat_main,catSub:x.cat_sub,description:x.description,amount:x.amount||0,employeeId:x.employee_id}));
@@ -1268,7 +1274,7 @@ function renderOrders(){
       ${(currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts'))?`
       <td>${(o.amount||0).toLocaleString()}${disc>0?`<div style="font-size:10px;color:var(--red)">خصم:${disc.toLocaleString()}</div>`:''}<div style="font-size:10px;color:var(--gold)">صافي:${calcFinal(o).toLocaleString()}</div></td>
       <td style="color:${rem>0?'#E74C3C':'#2ECC71'};font-weight:700">${rem.toLocaleString()}</td>
-      <td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--blue)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'💰 محصّل'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>`:''}
+      <td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCancelled?'var(--gr)':o.insuranceCollected?'var(--blue)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--orange)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCancelled?'🚫 ملغي':o.insuranceCollected?`💰 محصّل (${o.insuranceCollectDate||''})`:o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'⏳ معلق'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>`:''}
       <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         <button class="btn-sm" onclick="showTracking(${o.id})">تتبع</button>
@@ -1551,9 +1557,17 @@ function openOrderActions(orderId){
           ${!o.insuranceCollected?`
           <div style="background:var(--d4);padding:9px;border-radius:2px;margin-bottom:8px;border-right:3px solid var(--blue)">
             <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:6px">💰 تحصيل التأمين (يُسجَّل كدخل)</div>
-            <div style="display:flex;gap:8px;align-items:flex-end">
-              <div class="fg" style="margin:0;flex:1"><label style="font-size:10px">تاريخ التحصيل</label><input type="date" id="insCollectDate" value="${new Date().toISOString().split('T')[0]}"></div>
-              <button class="btn-add" style="margin-bottom:0;background:var(--blue);color:white;border:none" onclick="saveInsuranceCollect(${orderId})">تسجيل الدخل</button>
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:7px;align-items:flex-end">
+              <div class="fg" style="margin:0"><label style="font-size:10px">تاريخ التحصيل</label><input type="date" id="insCollectDate" value="${new Date().toISOString().split('T')[0]}"></div>
+              <div class="fg" style="margin:0"><label style="font-size:10px">طريقة الدفع</label>
+                <select id="insCollectMeth" onchange="toggleOrdInsTransfer(this.value)">${getPayOpts()}</select>
+              </div>
+              <button class="btn-add" style="margin-bottom:0;background:var(--blue);color:white;border:none" onclick="saveInsuranceCollect(${orderId})">تسجيل</button>
+            </div>
+            <div id="ordInsTransferRow" style="display:none;margin-top:6px">
+              <div class="fg" style="margin:0"><label style="font-size:10px">المحوَّل إليه</label>
+                <select id="ordInsTransferTo">${(cfg.transferRecipients||[]).map(r=>`<option>${r}</option>`).join('')}</select>
+              </div>
             </div>
           </div>`:`
           <div style="font-size:11px;color:var(--blue);margin-bottom:8px;padding:6px;background:rgba(41,128,185,.1);border-radius:2px">✅ تم التحصيل بتاريخ ${o.insuranceCollectDate||''}</div>`}
@@ -1566,6 +1580,12 @@ function openOrderActions(orderId){
             </div>
           </div>`:''}
           ${o.insuranceReturned?`<div style="font-size:11px;color:var(--green);padding:6px;background:rgba(39,174,96,.1);border-radius:2px">✅ تم الاسترداد بتاريخ ${o.insuranceReturnDate||''}</div>`:''}
+          ${o.insuranceCancelled?`<div style="font-size:11px;color:var(--gr);padding:6px;background:var(--d4);border-radius:2px">🚫 التأمين ملغي</div>`:''}
+          ${!o.insuranceCollected&&!o.insuranceCancelled?`
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--d4)">
+            <button class="btn-sm red" onclick="cancelInsurance(${orderId})">🚫 إلغاء التأمين</button>
+            <div style="font-size:10px;color:var(--gr);margin-top:4px">⚠️ إجراء خطير — يلغي التأمين بدون أي تسجيل مالي</div>
+          </div>`:''}
         </div>`:''}
         ${canEditDel?`
         <div class="section-box">
@@ -1583,6 +1603,10 @@ function openOrderActions(orderId){
             المتبقي: <strong style="color:${calcRem(o)>0?'var(--red)':'var(--green)'}">${calcRem(o).toLocaleString()} ر.س</strong>
             ${calcRem(o)===0?'<span style="color:var(--green)"> — الطلب مدفوع بالكامل، سيتغير التتبع فقط</span>':''}
           </div>
+          ${o.insurance>0&&!o.insuranceCollected&&!o.insuranceCancelled?`
+          <div style="background:rgba(231,76,60,.1);border:1px solid var(--red);border-radius:2px;padding:8px;margin-bottom:10px;font-size:11px;color:var(--red)">
+            ⚠️ لا يمكن إغلاق الطلب — التأمين (${(o.insurance||0).toLocaleString()} ر.س) لم يُحصَّل بعد
+          </div>`:`
           <div class="frow">
             <div class="fg"><label>تاريخ التسليم الفعلي</label><input type="date" id="finalDelDate" value="${new Date().toISOString().split('T')[0]}"></div>
             <div class="fg"><label>طريقة الدفع</label><select id="finalDelMeth" onchange="toggleTransferRow(this.value,'finalTransferRow')">${getPayOpts()}</select></div>
@@ -1594,7 +1618,7 @@ function openOrderActions(orderId){
           </div>
           <button class="btn-add" style="background:var(--green);color:white;border:none;width:100%;margin-top:6px" onclick="saveFinalDelivery(${orderId})">
             ✅ تأكيد التسليم النهائي
-          </button>
+          </button>`}
         </div>`:''}
       </div>
     </div>
@@ -1682,6 +1706,20 @@ async function saveInsuranceReturn(oid){
   });
   await logAudit('استرداد تأمين','orders',oid,`${insAmt} ر.س`);
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('✅ تم تسجيل الاسترداد كخرج','success');
+}
+
+async function cancelInsurance(oid){
+  const o=db.orders.find(x=>x.id===oid);if(!o)return;
+  if(!confirm(`⚠️ تحذير: إلغاء التأمين لطلب #${oid} - ${o.client}
+
+هذا الإجراء سيلغي التأمين (${(o.insurance||0).toLocaleString()} ر.س) بدون أي تسجيل مالي.
+
+هل تأكد؟`))return;
+  showLoading('...');
+  await sb.from('orders').update({insurance_cancelled:true,insurance:0}).eq('id',o.dbId);
+  await logAudit('إلغاء تأمين','orders',oid,`تم إلغاء التأمين - ${o.client}`);
+  await fetchAll();hideLoading();closeModal();renderOrders();
+  showToast('✅ تم إلغاء التأمين','success');
 }
 
 async function saveInsurance(oid){
@@ -2933,8 +2971,8 @@ function renderReports(){
     if(countEl)countEl.textContent=filtExp.length;
   }
   // ===== كشف الحركات المالية =====
-  const movAccEl=document.getElementById('financialMovementAccordion');
-  if(movAccEl){
+  const movTbl=document.getElementById('financialMovementTbl');
+  if(movTbl){
     const movements=[];
     // نقرأ كل الطلبات (بدون فلتر تاريخ الطلب) لأن الدفعات ممكن تكون في أي تاريخ
     db.orders.filter(o=>!o.isDraft).forEach(o=>{
@@ -2976,8 +3014,7 @@ function renderReports(){
       movByMonth[mKey].total+=m.amount;
     });
     const typeColors={'عربون':'#c9a84c','تسليم نهائي':'#27ae60','تسليم قديم':'#2980b9','تأمين محصّل':'#2980b9'};
-    const movAcc=document.getElementById('financialMovementAccordion');
-    if(movAcc)movAcc.innerHTML=Object.keys(movByMonth).sort().map(month=>{
+    movTbl.closest('table').parentElement.innerHTML=Object.keys(movByMonth).sort().map(month=>{
       const mData=movByMonth[month];
       const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const daysHtml=Object.keys(mData.days).sort().map(day=>{
@@ -4524,26 +4561,52 @@ function trackDrop(e,toIdx){
 // ===== EDIT ORDER MODAL =====
 function openEditOrderModal(orderId){
   const o=db.orders.find(x=>x.id===orderId);if(!o)return;
+  const isClosed=['تم التسليم','الحمدلله'].includes(o.status);
   const empOpts=db.users.filter(u=>['staff','manager'].includes(u.role)).map(u=>`<option value="${u.name}" ${o.employee===u.name?'selected':''}>${u.name}</option>`).join('');
-  const prods=(cfg.products||[]).map(t=>`<option>${t}</option>`).join('');
-  const types=(cfg.orderTypes||[]).map(t=>`<option>${t}</option>`).join('');
+  const prods=(cfg.products||[]).map(t=>`<option ${o.dressType===t?'selected':''}>${t}</option>`).join('');
+  const types=(cfg.orderTypes||[]).map(t=>`<option ${o.orderType===t?'selected':''}>${t}</option>`).join('');
   const steps=(cfg.trackingSteps||[]).map(s=>`<option ${o.status===s.name?'selected':''}>${s.name}</option>`).join('')+'<option '+(o.status==='الحمدلله'?'selected':'')+'>الحمدلله</option>';
+  const partialsHtml=(o.partials||[]).map((p,i)=>`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:center;background:var(--d4);padding:7px 9px;border-radius:2px;margin-bottom:5px">
+      <span style="font-size:11px;font-weight:700">${(p.amount||0).toLocaleString()} ر.س</span>
+      <span style="font-size:11px;color:var(--gr)">${p.date||''}</span>
+      <span style="font-size:11px;color:var(--gold)">${p.method||''}${p.isFinalDelivery?' ✅ نهائي':''}</span>
+      <button class="btn-sm red" style="padding:4px 8px;font-size:11px" onclick="deletePartial(${orderId},${i})">حذف</button>
+    </div>`).join('');
   document.getElementById('MC').innerHTML=`
   <div class="overlay" onclick="if(event.target===this)closeModal()">
-    <div class="modal">
-      <div class="m-hdr"><div class="m-ttl">✏️ تعديل الطلب #${o.id}</div><button class="m-close" onclick="closeModal()">×</button></div>
+    <div class="modal" style="max-width:720px">
+      <div class="m-hdr"><div class="m-ttl">✏️ تعديل الطلب #${o.id} — ${o.client}</div><button class="m-close" onclick="closeModal()">×</button></div>
       <div class="m-body">
-        <div class="a-warn">تعديل الطلب بعد الإنشاء — سيتم تسجيل التعديل في سجل العمليات</div>
-        <div class="fgrid" style="margin-top:12px">
+        <div class="a-warn" style="margin-bottom:12px">التعديلات تُسجَّل في سجل العمليات</div>
+        <div class="fgrid">
           <div class="fg"><label>رقم الفاتورة المحلية</label><input type="text" id="eoLocal" value="${o.localInvoice||''}"></div>
           <div class="fg"><label>الموظف المسؤول</label><select id="eoEmp">${empOpts}</select></div>
           <div class="fg"><label>اسم العميلة</label><input type="text" id="eoClient" value="${o.client}"></div>
           <div class="fg"><label>رقم الجوال</label><input type="text" id="eoPhone" value="${o.phone||''}"></div>
+          <div class="fg"><label>المنتج</label><select id="eoDressType">${prods}</select></div>
+          <div class="fg"><label>نوع الطلب</label><select id="eoOrderType">${types}</select></div>
+          <div class="fg"><label>المبلغ الإجمالي (ر.س)</label><input type="number" id="eoAmount" value="${o.amount||0}"></div>
+          <div class="fg"><label>العربون (ر.س)</label><input type="number" id="eoDeposit" value="${o.deposit||0}"></div>
+          <div class="fg"><label>التأمين (ر.س)</label><input type="number" id="eoIns" value="${o.insurance||0}"></div>
+          <div class="fg"><label>نوع الخصم</label>
+            <select id="eoDiscType">
+              <option value="none" ${(o.discountType||'none')==='none'?'selected':''}>بدون خصم</option>
+              <option value="amount" ${o.discountType==='amount'?'selected':''}>مبلغ ثابت</option>
+              <option value="percent" ${o.discountType==='percent'?'selected':''}>نسبة %</option>
+            </select>
+          </div>
+          <div class="fg"><label>قيمة الخصم</label><input type="number" id="eoDiscVal" value="${o.discountValue||0}"></div>
           <div class="fg"><label>تاريخ الطلب</label><input type="date" id="eoODate" value="${o.orderDate||''}"></div>
           <div class="fg"><label>موعد الاستلام</label><input type="date" id="eoDDate" value="${o.deliveryDate||''}"></div>
           <div class="fg"><label>الحالة</label><select id="eoStatus">${steps}</select></div>
-          <div class="fg"><label>ملاحظات</label><textarea id="eoNotes" rows="2" style="width:100%;background:var(--d3);border:1px solid var(--d4);border-radius:2px;padding:9px;color:var(--white);font-family:Tajawal,sans-serif;font-size:12px;outline:none">${o.notes||''}</textarea></div>
+          <div class="fg ffull"><label>ملاحظات</label><textarea id="eoNotes" rows="2" style="width:100%;background:var(--d3);border:1px solid var(--d4);border-radius:2px;padding:9px;color:var(--white);font-family:Tajawal,sans-serif;font-size:12px;outline:none">${o.notes||''}</textarea></div>
         </div>
+        ${(o.partials||[]).length>0?`
+        <div style="margin-top:14px">
+          <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:7px">💰 الدفعات — يمكن حذف أي دفعة</div>
+          ${partialsHtml}
+        </div>`:''}
       </div>
       <div class="m-foot">
         <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
@@ -4561,6 +4624,13 @@ async function saveEditOrder(orderId){
     employee:document.getElementById('eoEmp').value,
     client:document.getElementById('eoClient').value,
     phone:document.getElementById('eoPhone').value,
+    dress_type:document.getElementById('eoDressType')?.value||o.dressType,
+    order_type:document.getElementById('eoOrderType')?.value||o.orderType,
+    amount:parseFloat(document.getElementById('eoAmount').value)||o.amount||0,
+    deposit:parseFloat(document.getElementById('eoDeposit').value)||0,
+    insurance:parseFloat(document.getElementById('eoIns').value)||0,
+    discount_type:document.getElementById('eoDiscType')?.value||'none',
+    discount_value:parseFloat(document.getElementById('eoDiscVal')?.value)||0,
     order_date:document.getElementById('eoODate').value||null,
     delivery_date:document.getElementById('eoDDate').value||null,
     status:document.getElementById('eoStatus').value,
@@ -4825,9 +4895,17 @@ function openDeliveryActions(delId){
           ${!d.insuranceCollected?`
           <div style="margin-bottom:8px">
             <div style="font-size:11px;color:var(--gr);margin-bottom:5px">تحصيل التأمين (يُسجَّل كدخل)</div>
-            <div style="display:flex;gap:7px;align-items:flex-end">
-              <div class="fg" style="margin:0;flex:1"><label style="font-size:10px">تاريخ التحصيل</label><input type="date" id="daInsCollectDate" value="${new Date().toISOString().split('T')[0]}"></div>
-              <button class="btn-sm" style="margin-bottom:0;padding:8px 14px;background:var(--blue);color:white;border:none;border-radius:2px;cursor:pointer" onclick="saveDelInsCollect(${delId})">تسجيل الدخل</button>
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:7px;align-items:flex-end">
+              <div class="fg" style="margin:0"><label style="font-size:10px">تاريخ التحصيل</label><input type="date" id="daInsCollectDate" value="${new Date().toISOString().split('T')[0]}"></div>
+              <div class="fg" style="margin:0"><label style="font-size:10px">طريقة الدفع</label>
+                <select id="daInsCollectMeth" onchange="toggleDaInsTransfer(this.value)">${getPayOpts()}</select>
+              </div>
+              <button class="btn-sm" style="margin-bottom:0;padding:8px 14px;background:var(--blue);color:white;border:none;border-radius:2px;cursor:pointer" onclick="saveDelInsCollect(${delId})">تسجيل</button>
+            </div>
+            <div id="daInsTransferRow" style="display:none;margin-top:6px">
+              <div class="fg" style="margin:0"><label style="font-size:10px">المحوَّل إليه</label>
+                <select id="daInsTransferTo">${(cfg.transferRecipients||[]).map(r=>`<option>${r}</option>`).join('')}</select>
+              </div>
             </div>
           </div>`:`<div style="font-size:11px;color:var(--blue);margin-bottom:8px">✅ تم تحصيل التأمين</div>`}
           ${d.insuranceCollected&&!d.insuranceReturned?`
@@ -4852,6 +4930,16 @@ function openDeliveryActions(delId){
 
 function toggleDaTransfer(val){
   const el=document.getElementById('daTransferNote');
+  const isT=val==='تحويل كامل'||val==='تحويل جزئي'||val==='تحويل';
+  if(el)el.style.display=isT?'block':'none';
+}
+function toggleDaInsTransfer(val){
+  const el=document.getElementById('daInsTransferRow');
+  const isT=val==='تحويل كامل'||val==='تحويل جزئي'||val==='تحويل';
+  if(el)el.style.display=isT?'block':'none';
+}
+function toggleOrdInsTransfer(val){
+  const el=document.getElementById('ordInsTransferRow');
   const isT=val==='تحويل كامل'||val==='تحويل جزئي'||val==='تحويل';
   if(el)el.style.display=isT?'block':'none';
 }
@@ -4894,11 +4982,17 @@ async function saveDeliveryAction(delId){
     const cash=parseFloat(document.getElementById('daCash')?.value)||0;
     const card=parseFloat(document.getElementById('daCard')?.value)||0;
     const finalAmt=(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?cash+card:amt;
-    const partials=[...(d.partials||[]),{amount:finalAmt,method:(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?'مختلط':meth,cash:(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?cash:0,card:(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?card:0,date,type}];
-    await sb.from('deliveries').update({
-      received_amount:(d.receivedAmount||0)+finalAmt,
-      partials,
-    }).eq('id',delId);
+    const transferTo=document.getElementById('daTransferTo')?.value||'';
+    const partials=[...(d.partials||[]),{
+      amount:finalAmt,
+      method:(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?'مختلط':meth,
+      cash:(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?cash:0,
+      card:(meth==='__split__'||meth==='مختلط (نقدي+شبكة)')?card:0,
+      date,type,
+      transferTo:(meth==='تحويل كامل'||meth==='تحويل جزئي')?transferTo:'',
+    }];
+    // لا نغير received_amount - الدفعة تُسجَّل في partials بتاريخها فقط
+    await sb.from('deliveries').update({partials}).eq('id',delId);
     showToast('تمت الإضافة ✓','success');
   }
   await fetchAll();hideLoading();closeModal();renderDeliveries();
