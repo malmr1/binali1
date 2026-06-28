@@ -526,15 +526,10 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 
       <!-- كشف الحركات المالية -->
       <div class="sec-hdr"><div class="sec-ttl">📊 كشف الحركات المالية</div></div>
-      <div class="tw" style="margin-bottom:18px">
-        <table>
-          <thead><tr><th>التاريخ</th><th>النوع</th><th>رقم النظام</th><th>رقم المحل</th><th>العميل</th><th>المبلغ</th></tr></thead>
-          <tbody id="financialMovementTbl"></tbody>
-        </table>
-        <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-top:1px solid var(--d4)">
-          <span style="font-size:12px;font-weight:700">إجمالي الدخل في الفترة</span>
-          <span id="financialMovementTotal" style="font-size:16px;font-weight:900;color:var(--green)">0 ر.س</span>
-        </div>
+      <div id="financialMovementAccordion" style="margin-bottom:8px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-radius:2px;margin-bottom:18px;border-right:3px solid var(--green)">
+        <span style="font-size:12px;font-weight:700">إجمالي الدخل في الفترة</span>
+        <span id="financialMovementTotal" style="font-size:16px;font-weight:900;color:var(--green)">0 ر.س</span>
       </div>
 
       <!-- التحليل الشهري -->
@@ -980,9 +975,11 @@ function hijriToGregorian(hijriStr){
 }
 
 function calcDisc(o){if(o.discountType==='amount')return o.discountValue||0;if(o.discountType==='percent')return Math.round((o.amount||0)*(o.discountValue||0)/100);return 0;}
-function calcFinal(o){return(o.amount||0)-calcDisc(o);}
+// المبلغ الكامل قبل الخصم — الخصم يُسجَّل كخرج منفصل في المصروفات
+function calcFinal(o){return(o.amount||0);}
 function calcPaid(o){return(o.deposit||0)+(o.partials||[]).reduce((s,p)=>s+(p.amount||0),0);}
-function calcRem(o){return calcFinal(o)-calcPaid(o);}
+// المتبقي = المبلغ الكامل - المدفوع فعلاً
+function calcRem(o){return(o.amount||0)-calcPaid(o);}
 function asDate(v){if(!v)return null;const d=new Date(v);return isNaN(d.getTime())?null:d;}
 function dateInRange(v,from,to){const d=asDate(v);return !!d&&d>=from&&d<=to;}
 function expenseText(e){return String(e?.description||'');}
@@ -1117,7 +1114,7 @@ function renderDashboard(){
   const pending=db.orders.filter(o=>!o.isDraft&&o.status!=='تم التسليم'&&o.status!=='الحمدلله'&&o.status!==firstStep).length;
   const deliv=db.orders.filter(o=>o.status==='تم التسليم').length;
   const uncollected=db.orders.filter(o=>!['تم التسليم','الحمدلله'].includes(o.status)&&!o.isDraft).reduce((s,o)=>s+Math.max(0,calcRem(o)),0);
-  const totalSales=db.orders.filter(o=>!o.isDraft).reduce((s,o)=>s+calcFinal(o),0);
+  const totalSales=db.orders.filter(o=>!o.isDraft).reduce((s,o)=>s+(o.amount||0),0);
   // Today stats
   const todayOrders=db.orders.filter(o=>o.orderDate===today&&!o.isDraft);
   const todayPayments=db.orders.reduce((s,o)=>{
@@ -1274,7 +1271,7 @@ function renderOrders(){
       <td style="font-size:11px"><div>${o.orderDate||'-'}</div><div style="font-size:9px;color:var(--gold)">${o.orderDate?toHijri(o.orderDate):''}</div></td>
       <td style="font-size:11px"><div>${o.deliveryDate||'-'}</div><div style="font-size:9px;color:var(--gr)">${o.deliveryDate?toHijri(o.deliveryDate):''}</div></td>
       ${(currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts'))?`
-      <td>${(o.amount||0).toLocaleString()}${disc>0?`<div style="font-size:10px;color:var(--red)">خصم:${disc.toLocaleString()}</div>`:''}<div style="font-size:10px;color:var(--gold)">صافي:${calcFinal(o).toLocaleString()}</div></td>
+      <td style="font-weight:700">${(o.amount||0).toLocaleString()} ر.س${disc>0?`<div style="font-size:10px;color:var(--red)">✂️ خصم: ${disc.toLocaleString()} ر.س</div><div style="font-size:10px;color:var(--gold)">صافي: ${((o.amount||0)-disc).toLocaleString()} ر.س</div>`:''}</td>
       <td style="color:${rem>0?'#E74C3C':'#2ECC71'};font-weight:700">${rem.toLocaleString()}</td>
       <td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCancelled?'var(--gr)':o.insuranceCollected?'var(--blue)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--orange)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCancelled?'🚫 ملغي':o.insuranceCollected?`💰 محصّل (${o.insuranceCollectDate||''})`:o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'⏳ معلق'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>`:''}
       <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
@@ -1702,8 +1699,8 @@ async function applyOrderDiscount(oid){
   const discVal=parseFloat(document.getElementById('ordDiscVal').value)||0;
   const discDate=document.getElementById('ordDiscDate').value||new Date().toISOString().split('T')[0];
   if(!discVal){showToast('أدخل قيمة الخصم','error');return;}
-  const finalAmt=o.amount||0;
-  const discAmt=discType==='percent'?Math.round(finalAmt*discVal/100):discVal;
+  const fullAmt=o.amount||0;
+  const discAmt=discType==='percent'?Math.round(fullAmt*discVal/100):discVal;
   if(!confirm(`تطبيق خصم ${discAmt.toLocaleString()} ر.س على طلب #${oid}؟
 سيُسجَّل كخرج بتاريخ ${discDate}`))return;
   showLoading('...');
@@ -3024,8 +3021,8 @@ function renderReports(){
     if(countEl)countEl.textContent=filtExp.length;
   }
   // ===== كشف الحركات المالية =====
-  const movTbl=document.getElementById('financialMovementTbl');
-  if(movTbl){
+  const movAccEl=document.getElementById('financialMovementAccordion');
+  if(movAccEl){
     const movements=[];
     // نقرأ كل الطلبات (بدون فلتر تاريخ الطلب) لأن الدفعات ممكن تكون في أي تاريخ
     db.orders.filter(o=>!o.isDraft).forEach(o=>{
@@ -3067,7 +3064,7 @@ function renderReports(){
       movByMonth[mKey].total+=m.amount;
     });
     const typeColors={'عربون':'#c9a84c','تسليم نهائي':'#27ae60','تسليم قديم':'#2980b9','تأمين محصّل':'#2980b9'};
-    movTbl.closest('table').parentElement.innerHTML=Object.keys(movByMonth).sort().map(month=>{
+    movAccEl.innerHTML=Object.keys(movByMonth).sort().map(month=>{
       const mData=movByMonth[month];
       const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const daysHtml=Object.keys(mData.days).sort().map(day=>{
