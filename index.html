@@ -720,6 +720,8 @@ async function fetchAll(){
     insuranceCollectTime:x.insurance_collect_time||'order',insuranceCollectOther:x.insurance_collect_other||'',
     insuranceCollected:x.insurance_collected||false,insuranceCollectDate:x.insurance_collect_date||'',
     insuranceCancelled:x.insurance_cancelled||false,
+    discountApplied:x.discount_applied||false,
+    discountDate:x.discount_date||'',
     finalDeliveryDate:x.final_delivery_date||'',
   }));
   db.expenses=(e.data||[]).map(x=>({id:x.id,date:x.date,catMain:x.cat_main,catSub:x.cat_sub,description:x.description,amount:x.amount||0,employeeId:x.employee_id}));
@@ -1587,6 +1589,25 @@ function openOrderActions(orderId){
             <div style="font-size:10px;color:var(--gr);margin-top:4px">⚠️ إجراء خطير — يلغي التأمين بدون أي تسجيل مالي</div>
           </div>`:''}
         </div>`:''}
+        <div class="section-box" style="border-right:3px solid var(--orange)">
+          <div class="section-box-ttl">✂️ الخصم${o.discountType&&o.discountType!=='none'?` — موجود: ${o.discountType==='percent'?o.discountValue+'%':o.discountValue.toLocaleString()+' ر.س'}${o.discountApplied?' ✅ مُطبَّق':' ⏳ معلق'}`:''}</div>
+          <div class="fgrid" style="margin-bottom:8px">
+            <div class="fg" style="margin:0"><label style="font-size:10px">نوع الخصم</label>
+              <select id="ordDiscType">
+                <option value="amount">مبلغ ثابت</option>
+                <option value="percent">نسبة %</option>
+              </select>
+            </div>
+            <div class="fg" style="margin:0"><label style="font-size:10px">القيمة</label>
+              <input type="number" id="ordDiscVal" placeholder="0" min="0">
+            </div>
+            <div class="fg" style="margin:0"><label style="font-size:10px">تاريخ التطبيق</label>
+              <input type="date" id="ordDiscDate" value="${new Date().toISOString().split('T')[0]}">
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--gr);margin-bottom:8px">الخصم يُسجَّل كخرج في المصروفات بتاريخ التطبيق ويظهر في الفاتورة</div>
+          <button class="btn-add" style="background:var(--orange);color:white;border:none" onclick="applyOrderDiscount(${orderId})">✂️ تطبيق الخصم</button>
+        </div>
         ${canEditDel?`
         <div class="section-box">
           <div class="section-box-ttl">📅 موعد الاستلام</div>
@@ -1673,6 +1694,38 @@ async function addPartial(oid){
   // الدفعة تُحسب من بيانات الطلب مباشرة
   await logAudit('دفعة جديدة','orders',oid,`${payDetail.amount.toLocaleString()} ر.س - ${payDetail.method}`);
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('تمت الدفعة ✓','success');
+}
+
+async function applyOrderDiscount(oid){
+  const o=db.orders.find(x=>x.id===oid);if(!o)return;
+  const discType=document.getElementById('ordDiscType').value;
+  const discVal=parseFloat(document.getElementById('ordDiscVal').value)||0;
+  const discDate=document.getElementById('ordDiscDate').value||new Date().toISOString().split('T')[0];
+  if(!discVal){showToast('أدخل قيمة الخصم','error');return;}
+  const finalAmt=o.amount||0;
+  const discAmt=discType==='percent'?Math.round(finalAmt*discVal/100):discVal;
+  if(!confirm(`تطبيق خصم ${discAmt.toLocaleString()} ر.س على طلب #${oid}؟
+سيُسجَّل كخرج بتاريخ ${discDate}`))return;
+  showLoading('...');
+  // حفظ الخصم في الطلب
+  await sb.from('orders').update({
+    discount_type:discType,
+    discount_value:discVal,
+    discount_applied:true,
+    discount_date:discDate,
+  }).eq('id',o.dbId);
+  // تسجيله كخرج في المصروفات
+  await sb.from('expenses').insert({
+    shop_id:currentShop?.id||1,
+    date:discDate,
+    cat_main:'خصومات',
+    cat_sub:'خصم طلب',
+    description:`خصم طلب #${oid} - ${o.client} (${discType==='percent'?discVal+'%':discVal.toLocaleString()+' ر.س'})`,
+    amount:discAmt,
+  });
+  await logAudit('خصم طلب','orders',oid,`${discAmt} ر.س بتاريخ ${discDate}`);
+  await fetchAll();hideLoading();closeModal();renderOrders();
+  showToast(`✅ تم تطبيق خصم ${discAmt.toLocaleString()} ر.س`,'success');
 }
 
 async function saveInsuranceCollect(oid){
