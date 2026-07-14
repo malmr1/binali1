@@ -260,6 +260,9 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 .hp-mon-btn:hover{background:rgba(201,168,76,.15);color:var(--white)}
 .hp-mon-btn.active{background:var(--gold);color:var(--black);font-weight:700;border-color:var(--gold)}
 
+.row-returned, .row-returned td{background:rgba(120,120,120,.08) !important;}
+.row-returned td, .row-returned td *{color:#8a8a8a !important;text-decoration:line-through !important;text-decoration-color:rgba(180,180,180,.35) !important;text-decoration-thickness:1px !important;}
+.row-returned .badge{text-decoration:none !important;}
 </style>
 </head>
 <body>
@@ -335,11 +338,6 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
         <div class="tw">
           <div class="filters">
             <input class="fi" id="orderSearch" placeholder="🔍 اسم · جوال · #رقم نظام · م رقم محل" oninput="renderOrders()">
-            <select class="fi" id="orderStatusF" onchange="renderOrders()"><option value="">كل الحالات</option></select>
-            <select class="fi" id="orderTypeF" onchange="renderOrders()"><option value="">كل الأنواع</option></select>
-          <select class="fi" id="orderDraftF" onchange="renderOrders()"><option value="">الكل</option><option value="draft">مسودات فقط</option><option value="confirmed">مؤكدة فقط</option></select>
-          </div>
-          <div class="filters" style="margin-top:6px">
             <select class="fi" id="sortField" onchange="updateOrderSortSub();renderOrders()">
               <option value="">— بدون فرز —</option>
               <option value="status">الحالات</option>
@@ -354,12 +352,10 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
             </select>
             <select class="fi" id="sortSub1" style="display:none" onchange="renderOrders()"></select>
           </div>
-          <div style="overflow-x:auto"><table><thead><tr>
-            <th>رقم المحل</th><th>رقم النظام</th><th>الموظف</th><th>العميل</th>
-            <th>المنتج</th><th>نوع الطلب</th><th>تاريخ الطلب</th><th>موعد الاستلام</th>
-            <th id="thAmounts" style="display:none">المبلغ</th><th id="thRem" style="display:none">المتبقي</th><th id="thIns" style="display:none">تأمين</th>
-            <th>الحالة</th><th>إجراءات</th>
-          </tr></thead><tbody id="ordersTbl"></tbody></table></div>
+          <div class="filters" style="margin-top:6px;justify-content:flex-start">
+            <button class="btn-sm" id="btnOrdCal" onclick="toggleOrdersCalendar()" style="background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.3)">📅 ميلادي</button>
+          </div>
+          <div id="ordersAccordion"></div>
         </div>
       </div>
 
@@ -958,6 +954,19 @@ function populateFilters(){
 
 // ===== HELPERS =====
 function toHijri(d){if(!d)return'';try{return new Date(d).toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric',month:'2-digit',day:'2-digit'});}catch(e){return'';}}
+// يحسب السنة والشهر الهجري لتاريخ ميلادي معين، لتجميع الكشوفات حسب الشهر الهجري
+function hijriYearMonth(dateStr){
+  const d=new Date(dateStr);
+  const parts=new Intl.DateTimeFormat('en-u-ca-islamic',{year:'numeric',month:'2-digit'}).formatToParts(d);
+  const y=parts.find(p=>p.type==='year')?.value||'0000';
+  const m=parts.find(p=>p.type==='month')?.value||'01';
+  const label=d.toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric',month:'long'})+' هـ';
+  return{key:`${y}-${m}`,label};
+}
+// هل وضع التقارير الحالي هجري؟
+function isRepHijri(){return(document.getElementById('repCalType')?.value||'g')==='h';}
+// يعرض تاريخ حسب اختيار التقويم بالتقارير (هجري/ميلادي)
+function repDispDate(d){if(!d)return'-';return isRepHijri()?toHijri(d):d;}
 
 // Convert Hijri string (١٤٤٦/٠٦/١٥ or 1446/06/15) to Gregorian date string
 function hijriToGregorian(hijriStr){
@@ -973,11 +982,13 @@ function hijriToGregorian(hijriStr){
     if(parseInt(parts[0])>99){y=parseInt(parts[0]);m=parseInt(parts[1]);d=parseInt(parts[2]);}
     else{d=parseInt(parts[0]);m=parseInt(parts[1]);y=parseInt(parts[2]);}
     if(!y||!m||!d)return'';
-    // Use Intl to find the Gregorian equivalent by searching
-    // We approximate: Hijri year offset ~622 years, ~354 days/year
-    // Use a binary search approach with toLocaleDateString
-    const approxGreg=new Date((y-579)*365.25);
-    for(let offset=-60;offset<=60;offset++){
+    // تقدير التاريخ الميلادي المقابل: نبدأ من نقطة مرجعية معروفة (١ محرم ١٤٤٥هـ ≈ ١٩ يوليو ٢٠٢٣م)
+    // ثم نحسب فرق الأيام التقريبي بمعدل ٣٥٤.٣٦٧ يوم بالسنة الهجرية و٢٩.٥٣ يوم بالشهر الهجري
+    const anchorGregDate=new Date(2023,6,19); // 1 Muharram 1445H
+    const anchorHijriYear=1445;
+    const daysOffset=(y-anchorHijriYear)*354.36667+(m-1)*29.53059+(d-1);
+    const approxGreg=new Date(anchorGregDate.getTime()+daysOffset*24*60*60*1000);
+    for(let offset=-10;offset<=10;offset++){
       const testDate=new Date(approxGreg.getTime()+offset*24*60*60*1000);
       const hijriCheck=testDate.toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric',month:'2-digit',day:'2-digit'});
       const normCheck=hijriCheck.replace(/[٠-٩]/g,x=>x.charCodeAt(0)-1632).replace(/\s/g,'');
@@ -1109,15 +1120,8 @@ function fmtDur(mins){if(!mins&&mins!==0)return'-';return`${Math.floor(mins/60)}
 
 // ===== DELIVERY ALERTS =====
 function checkDelivAlerts(){
-  const today=new Date();today.setHours(0,0,0,0);
-  const soon=db.orders.filter(o=>{
-    if(['تم التسليم','الحمدلله'].includes(o.status))return false;
-    const d=new Date(o.deliveryDate);d.setHours(0,0,0,0);
-    const diff=(d-today)/(864e5);return diff>=0&&diff<=3;
-  });
   const el=document.getElementById('delivAlerts');if(!el)return;
-  if(soon.length>0)el.innerHTML=`<div class="a-warn">⚠️ ${soon.length} طلب موعد تسليمه خلال 3 أيام! ${soon.map(o=>`<strong>#${o.id} ${o.client}</strong>`).join(' · ')}</div>`;
-  else el.innerHTML='';
+  el.innerHTML=''; // الإشعار مُلغى بناءً على طلب المستخدم
 }
 
 // ===== DASHBOARD =====
@@ -1125,7 +1129,6 @@ function checkDelivAlerts(){
 function showUpcomingOrders(){
   window._filterUpcoming=true;
   switchPage('orders');
-  setTimeout(()=>{renderOrders();window._filterUpcoming=false;},100);
 }
 function renderDashboard(){
   const today=new Date().toISOString().split('T')[0];
@@ -1181,12 +1184,6 @@ function renderDashboard(){
     </tr>`;
   }).join('');
   checkDelivAlerts();
-  // Insurance alert
-  const unretInsAlert=db.orders.filter(o=>o.insurance>0&&!o.insuranceReturned&&o.status==='تم التسليم');
-  if(unretInsAlert.length>0){
-    const el=document.getElementById('delivAlerts');
-    if(el)el.innerHTML+='<div class="a-warn" style="margin-top:7px">🛡️ '+unretInsAlert.length+' طلب تم تسليمه ولم يُسترد تأمينه بعد!</div>';
-  }
   // Upcoming orders widget
   const upcoming=db.orders.filter(o=>{
     if(o.isDraft||!o.deliveryDate)return false;
@@ -1214,13 +1211,13 @@ function renderDashboard(){
 
 // ===== ORDERS =====
 function getOrderRowStyle(o){
+  if(o.returned)return '';// التنسيق يُطبَّق عبر class="row-returned" لتغطية كل خلايا السطر
   if(o.deliveryDate){
     const d=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
     if(d>=0&&d<=7)return 'background:rgba(255,140,0,.15)';
   }
   const step=(cfg.trackingSteps||[]).find(s=>s.name===o.status);
   if(step?.color)return 'background:'+step.color+'33';
-  if(o.returned)return 'opacity:.55';
   return '';
 }
 // ===== فرز متعدد المستويات لشاشة الطلبات =====
@@ -1289,20 +1286,59 @@ function applyOrderSort(list){
   }
   return list;
 }
+// يبدّل بين عرض الأشهر بالتقويم الميلادي والهجري بشاشة الطلبات
+function toggleOrdersCalendar(){
+  window._ordersHijri=!window._ordersHijri;
+  const btn=document.getElementById('btnOrdCal');
+  if(btn)btn.textContent=window._ordersHijri?'🌙 هجري':'📅 ميلادي';
+  renderOrders();
+}
+// قالب صف الطلب الواحد (نفس التصميم السابق) — يُستخدم داخل كل مجموعة شهرية
+function orderRowHtml(o,canAmt,canDel){
+  const disc=calcDisc(o);const h=(o.tracking||[]).slice(-1)[0];const rem=calcRem(o);
+  return`<tr class="${o.returned?'row-returned':''}" style="${getOrderRowStyle(o)}">
+    <td style="color:var(--gr);font-size:11px">${o.localInvoice||'-'}</td>
+    <td><strong style="color:var(--gold);cursor:pointer" onclick="showQR(${o.id})">#${o.id} 🔳</strong></td>
+    <td style="font-size:11px">${o.employee||'-'}</td>
+    <td><div style="font-weight:600">${o.client}${o.returned?` <span class="badge" style="background:#3a3a3a;color:#aaa">مرتجع</span>`:''} ${o.isDraft?`<span class="badge b-gray">مسودة</span>`:''}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
+    <td style="font-size:11px">${o.dressType||'-'}</td>
+    <td style="font-size:11px">${o.orderType||'-'}</td>
+    <td style="font-size:11px"><div>${o.orderDate||'-'}</div><div style="font-size:9px;color:var(--gold)">${o.orderDate?toHijri(o.orderDate):''}</div></td>
+    <td style="font-size:11px"><div>${o.deliveryDate||'-'}</div><div style="font-size:9px;color:var(--gr)">${o.deliveryDate?toHijri(o.deliveryDate):''}</div></td>
+    ${canAmt?`
+    <td style="font-weight:700">${(o.amount||0).toLocaleString()} ر.س${disc>0?`<div style="font-size:10px;color:var(--red)">✂️ خصم: ${disc.toLocaleString()} ر.س</div><div style="font-size:10px;color:var(--gold)">صافي: ${((o.amount||0)-disc).toLocaleString()} ر.س</div>`:''}</td>
+    <td style="font-size:11px">
+      <div style="color:${rem>0?'#E74C3C':'#2ECC71'};font-weight:700">${rem.toLocaleString()} <small style="font-size:9px">للعميل</small></div>
+      ${disc>0?`<div style="color:var(--gr);font-size:10px">${(o.amount||0).toLocaleString()} <small>الإجمالي</small></div>`:''}
+    </td>
+    <td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCancelled?'var(--gr)':o.insuranceCollected?'var(--blue)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--orange)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCancelled?'🚫 ملغي':o.insuranceCollected?`💰 محصّل (${o.insuranceCollectDate||''})`:o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'⏳ معلق'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>`:''}
+    <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
+    <td><div style="display:flex;gap:3px;flex-wrap:wrap">
+      <button class="btn-sm" onclick="showTracking(${o.id})">تتبع</button>
+      ${o.isDraft?`<button class="btn-sm green" onclick="confirmDraft(${o.id})">✅ تأكيد</button>
+        <button class="btn-sm" onclick="editOrderDraft(${o.id})">✏️ إكمال الطلب</button>`:`<button class="btn-sm blue" onclick="openOrderActions(${o.id})">إجراءات</button>`}
+      <button class="btn-sm green" onclick="printInvoice(${o.id})">🖨️ فاتورة</button>
+      <button class="btn-sm" onclick="printMeasurements(${o.id})">📐 مقاسات</button>
+      <button class="btn-sm" onclick="printPayInvoice(${o.id})">إيصال</button>
+      ${canDel?`<button class="btn-sm red" onclick="deleteOrder(${o.id})">حذف</button>`:''}
+    </div></td>
+  </tr>`;
+}
+function ordersTableHead(canAmt){
+  return`<thead><tr>
+    <th>رقم المحل</th><th>رقم النظام</th><th>الموظف</th><th>العميل</th>
+    <th>المنتج</th><th>نوع الطلب</th><th>تاريخ الطلب</th><th>موعد الاستلام</th>
+    ${canAmt?'<th>المبلغ</th><th>المتبقي</th><th>تأمين</th>':''}
+    <th>الحالة</th><th>إجراءات</th>
+  </tr></thead>`;
+}
 function renderOrders(){
-  // إظهار/إخفاء أعمدة المبالغ حسب الصلاحية
   const canAmt=currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts');
-  ['thAmounts','thRem','thIns'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el)el.style.display=canAmt?'':'none';
-  });
   const search=(document.getElementById('orderSearch')?.value||'').toLowerCase().replace('#','');
-  const stF=document.getElementById('orderStatusF')?.value||'';
-  const tyF=document.getElementById('orderTypeF')?.value||'';
-  const draftF=document.getElementById('orderDraftF')?.value||'';
   const canAdd=currentUser.role==='manager'||currentUser.role==='staff'||canDo('canAddOrder');
   document.getElementById('btnAddOrder').style.display=canAdd?'inline-flex':'none';
-  // Upcoming filter from dashboard
+  const acc=document.getElementById('ordersAccordion');
+  // Upcoming filter from dashboard — عرض مسطّح غير مجمّع بالأشهر (قائمة قصيرة عاجلة)
   if(window._filterUpcoming){
     window._filterUpcoming=false;
     const upList2=db.orders.filter(o=>{
@@ -1310,16 +1346,15 @@ function renderOrders(){
       const d=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
       return d>=0&&d<=7;
     }).sort((a,b)=>new Date(a.deliveryDate)-new Date(b.deliveryDate));
-    const tb=document.getElementById('ordersTbl');
-    if(tb){
+    if(acc){
       if(!upList2.length){
-        tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:22px;color:var(--gr)">✅ لا توجد طلبات تسليمها خلال الأسبوع القادم</td></tr>';
-      } else {
-        tb.innerHTML=upList2.map(o=>{
+        acc.innerHTML='<div style="text-align:center;padding:22px;color:var(--gr)">✅ لا توجد طلبات تسليمها خلال الأسبوع القادم</div>';
+      }else{
+        acc.innerHTML=`<div style="overflow-x:auto"><table><thead><tr><th colspan="2">الطلب</th><th>العميل</th><th>موعد الاستلام</th><th>الحالة</th><th colspan="5">إجراءات</th></tr></thead><tbody>${upList2.map(o=>{
           const d=Math.ceil((new Date(o.deliveryDate)-new Date())/(1000*60*60*24));
           const badge=d===0?'<span class="badge b-red">اليوم</span>':d===1?'<span class="badge b-amber">غداً</span>':`<span class="badge b-blue">${d} أيام</span>`;
           return `<tr style="${getOrderRowStyle(o)}"><td colspan="2"><strong>#${o.id}</strong> ${badge}</td><td>${o.client}</td><td>${o.deliveryDate}</td><td>${o.status||'-'}</td><td colspan="5"><button class="btn-sm" onclick="openOrderActions(${o.id})">إجراءات ←</button></td></tr>`;
-        }).join('');
+        }).join('')}</tbody></table></div>`;
       }
     }
     return;
@@ -1328,55 +1363,50 @@ function renderOrders(){
     let ms=false;
     if(!search){ms=true;}
     else if(search.startsWith('#')){
-      // Search by system invoice number
       const num=search.slice(1);
       ms=String(o.id).includes(num);
     }else if(search.startsWith('م')){
-      // Search by local (shop) invoice number
       const num=search.slice(1);
       ms=String(o.localInvoice||'').includes(num);
     }else{
-      // Search by name, phone, or both invoice numbers
       ms=o.client?.toLowerCase().includes(search)||
          o.phone?.includes(search)||
          String(o.id).includes(search)||
          String(o.localInvoice||'').toLowerCase().includes(search);
     }
-    const draftMatch=!draftF||(draftF==='draft'&&o.isDraft)||(draftF==='confirmed'&&!o.isDraft);
-    return ms&&(!stF||o.status===stF)&&(!tyF||o.orderType===tyF)&&draftMatch;
+    return ms;
   });
   list=applyOrderSort(list);
   const canDel=currentUser.role==='manager';
-  document.getElementById('ordersTbl').innerHTML=list.map(o=>{
-    const disc=calcDisc(o);const h=(o.tracking||[]).slice(-1)[0];const rem=calcRem(o);
-    return`<tr style="${getOrderRowStyle(o)}">
-      <td style="color:var(--gr);font-size:11px">${o.localInvoice||'-'}</td>
-      <td><strong style="color:var(--gold);cursor:pointer" onclick="showQR(${o.id})">#${o.id} 🔳</strong></td>
-      <td style="font-size:11px">${o.employee||'-'}</td>
-      <td><div style="font-weight:600${o.returned?';text-decoration:line-through;color:#555':''}">${o.client}${o.returned?` <span class="badge" style="background:#3a3a3a;color:#bbb;text-decoration:none">مرتجع</span>`:''} ${o.isDraft?`<span class="badge b-gray">مسودة</span>`:''}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
-      <td style="font-size:11px">${o.dressType||'-'}</td>
-      <td style="font-size:11px">${o.orderType||'-'}</td>
-      <td style="font-size:11px"><div>${o.orderDate||'-'}</div><div style="font-size:9px;color:var(--gold)">${o.orderDate?toHijri(o.orderDate):''}</div></td>
-      <td style="font-size:11px"><div>${o.deliveryDate||'-'}</div><div style="font-size:9px;color:var(--gr)">${o.deliveryDate?toHijri(o.deliveryDate):''}</div></td>
-      ${(currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts'))?`
-      <td style="font-weight:700">${(o.amount||0).toLocaleString()} ر.س${disc>0?`<div style="font-size:10px;color:var(--red)">✂️ خصم: ${disc.toLocaleString()} ر.س</div><div style="font-size:10px;color:var(--gold)">صافي: ${((o.amount||0)-disc).toLocaleString()} ر.س</div>`:''}</td>
-      <td style="font-size:11px">
-        <div style="color:${rem>0?'#E74C3C':'#2ECC71'};font-weight:700">${rem.toLocaleString()} <small style="font-size:9px">للعميل</small></div>
-        ${disc>0?`<div style="color:var(--gr);font-size:10px">${(o.amount||0).toLocaleString()} <small>الإجمالي</small></div>`:''}
-      </td>
-      <td>${o.insurance>0?`<div style="font-size:11px;font-weight:700;color:var(--gold)">${(o.insurance||0).toLocaleString()} ر.س</div><div style="font-size:10px;color:${o.insuranceReturned?'var(--green)':o.insuranceCancelled?'var(--gr)':o.insuranceCollected?'var(--blue)':o.insuranceCollectTime==='delivery'?'var(--orange)':'var(--orange)'}">${o.insuranceReturned?'✅ مسترد':o.insuranceCancelled?'🚫 ملغي':o.insuranceCollected?`💰 محصّل (${o.insuranceCollectDate||''})`:o.insuranceCollectTime==='delivery'?'⏳ عند التسليم':o.insuranceCollectTime==='other'?(o.insuranceCollectOther||'أخرى'):'⏳ معلق'}</div>`:'<span style="color:var(--gr)">-</span>'}</td>`:''}
-      <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
-      <td><div style="display:flex;gap:3px;flex-wrap:wrap">
-        <button class="btn-sm" onclick="showTracking(${o.id})">تتبع</button>
-        ${o.isDraft?`<button class="btn-sm green" onclick="confirmDraft(${o.id})">✅ تأكيد</button>
-          <button class="btn-sm" onclick="editOrderDraft(${o.id})">✏️ إكمال الطلب</button>`:`<button class="btn-sm blue" onclick="openOrderActions(${o.id})">إجراءات</button>`}
-        <button class="btn-sm green" onclick="printInvoice(${o.id})">🖨️ فاتورة</button>
-        <button class="btn-sm" onclick="printMeasurements(${o.id})">📐 مقاسات</button>
-        <button class="btn-sm" onclick="printPayInvoice(${o.id})">إيصال</button>
-        ${canDel?`<button class="btn-sm red" onclick="deleteOrder(${o.id})">حذف</button>`:''}
-      </div></td>
-    </tr>`;
-  }).join('')||'<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--gr)">لا توجد طلبات</td></tr>';
+  if(!acc)return;
+  if(!list.length){acc.innerHTML='<div style="text-align:center;padding:24px;color:var(--gr)">لا توجد طلبات</div>';return;}
+  // تجميع الطلبات حسب الشهر (هجري أو ميلادي حسب الزر) — تاريخ الطلب هو الأساس
+  const byMonth={};
+  const useHijri=!!window._ordersHijri;
+  list.forEach(o=>{
+    let key,label;
+    if(o.orderDate){
+      if(useHijri){const hym=hijriYearMonth(o.orderDate);key=hym.key;label=hym.label;}
+      else{const d=new Date(o.orderDate);key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
+    }else{key='—';label='بدون تاريخ';}
+    if(!byMonth[key])byMonth[key]={rows:[],label};
+    byMonth[key].rows.push(o);
+  });
+  window._openOrderMonths=window._openOrderMonths||new Set();
+  const monthKeys=Object.keys(byMonth).sort().reverse();
+  acc.innerHTML=monthKeys.map(month=>{
+    const g=byMonth[month];
+    const mLabel=g.label||new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+    const isOpen=window._openOrderMonths.has(month);
+    return`<details ${isOpen?'open':''} ontoggle="this.open?window._openOrderMonths.add('${month}'):window._openOrderMonths.delete('${month}')" style="margin-bottom:8px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
+      <summary style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:700;color:var(--gold);display:flex;justify-content:space-between;list-style:none">
+        <span>${mLabel}</span><span style="color:var(--gr);font-weight:400">${g.rows.length} طلب</span>
+      </summary>
+      <div style="overflow-x:auto">
+        <table>${ordersTableHead(canAmt)}<tbody>${g.rows.map(o=>orderRowHtml(o,canAmt,canDel)).join('')}</tbody></table>
+      </div>
+    </details>`;
+  }).join('');
 }
 
 function openOrderModal(){
@@ -2946,13 +2976,7 @@ function renderReports(){
       <div class="fc-val" style="color:var(--gold)">${salesInfo.toLocaleString()} <small>ر.س</small></div>
       <div class="fc-sub">${fOrders.length} طلب</div>
     </div>
-    <div class="fin-card" style="border-top:2px solid var(--orange)">
-      <div class="fc-lbl">الخصومات</div>
-      <div class="fc-val" style="color:var(--orange)">${totalDiscounts.toLocaleString()} <small>ر.س</small></div>
-      <div class="fc-sub">صافي: ${salesAfterDisc.toLocaleString()} ر.س</div>
-    </div>
     <div class="fin-card" style="border-top:2px solid rgba(180,180,180,.4)">
-      <div style="font-size:9px;color:#aaa;margin-bottom:3px;letter-spacing:1px">للمعلومات فقط</div>
       <div class="fc-lbl">الطلبات</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
         <div style="background:var(--d4);padding:7px;border-radius:2px;text-align:center">
@@ -2968,13 +2992,11 @@ function renderReports(){
       </div>
     </div>
     <div class="fin-card" style="border-top:2px solid rgba(180,180,180,.4)">
-      <div style="font-size:9px;color:#aaa;margin-bottom:3px;letter-spacing:1px">للمعلومات فقط</div>
       <div class="fc-lbl">تسليمات قديمة</div>
       <div class="fc-val" style="color:var(--blue)">${incomeFromDeliveries.toLocaleString()} <small>ر.س</small></div>
       <div class="fc-sub">${delivCount} تسليم</div>
     </div>
     <div class="fin-card" style="border-top:2px solid var(--green)">
-      <div style="font-size:9px;color:#aaa;margin-bottom:3px;letter-spacing:1px">للمعلومات فقط</div>
       <div class="fc-lbl">✅ طلبات تم تسليمها</div>
       <div class="fc-val" style="color:var(--green)">${finalDeliveredAmt.toLocaleString()} <small>ر.س</small></div>
       <div class="fc-sub">${finalDeliveredCount} طلب</div>
@@ -2982,19 +3004,15 @@ function renderReports(){
     <div class="fin-card" style="border-top:3px solid var(--green)">
       <div class="fc-lbl">💰 إجمالي الدخل</div>
       <div class="fc-val" style="color:var(--green)">${totalIncome.toLocaleString()} <small>ر.س</small></div>
-      <div class="fc-sub">كل مبلغ دخل الصندوق فعلاً</div>
     </div>
     <div class="fin-card" style="border-top:3px solid var(--red)">
       <div class="fc-lbl">📤 إجمالي الخرج</div>
       <div class="fc-val" style="color:var(--red)">${totalExpenses.toLocaleString()} <small>ر.س</small></div>
-      <div class="fc-sub">مصروفات + خصومات + استرداد تأمين</div>
     </div>
     <div class="fin-card" style="border-top:3px solid ${profit>=0?'var(--green)':'var(--red)'}">
       <div class="fc-lbl">📊 صافي الربح</div>
       <div class="fc-val" style="color:${profit>=0?'var(--green)':'var(--red)'}">${profit.toLocaleString()} <small>ر.س</small></div>
-      <div class="fc-sub">الدخل − الخرج</div>
     </div>
-    <div class="fin-card"><div class="fc-lbl">المرتجعات (${fReturns.length})</div><div class="fc-val" style="color:var(--red)">${returnsAmt.toLocaleString()} <small>ر.س</small></div></div>
     <div class="fin-card" style="border-top:3px solid var(--blue)">
       <div class="fc-lbl">🛡️ تأمين محصّل</div>
       <div class="fc-val" style="color:var(--blue)">${insCollectedAmt.toLocaleString()} <small>ر.س</small></div>
@@ -3081,15 +3099,16 @@ function renderReports(){
       return new Date(b.deliveryDate||0)-new Date(a.deliveryDate||0);
     });
     allPeriodOrders.forEach(o=>{
-      const d=new Date(o.orderDate);
-      const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      if(!ordByMonth[key])ordByMonth[key]=[];
-      ordByMonth[key].push(o);
+      let key,label;
+      if(isRepHijri()){const hym=hijriYearMonth(o.orderDate);key=hym.key;label=hym.label;}
+      else{const d=new Date(o.orderDate);key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
+      if(!ordByMonth[key])ordByMonth[key]={rows:[],label};
+      ordByMonth[key].rows.push(o);
     });
     window._openOrdMonths=window._openOrdMonths||new Set();
     ordAcc.innerHTML=Object.keys(ordByMonth).sort().reverse().map(month=>{
-      const rows=ordByMonth[month];
-      const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+      const rows=ordByMonth[month].rows;
+      const mLabel=ordByMonth[month].label||new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const mTotal=rows.reduce((s,o)=>s+(o.amount||0),0);
       const isOpen=window._openOrdMonths.has(month);
       return`<details ${isOpen?'open':''} ontoggle="this.open?window._openOrdMonths.add('${month}'):window._openOrdMonths.delete('${month}')" style="margin-bottom:6px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
@@ -3098,15 +3117,18 @@ function renderReports(){
         </summary>
         <div style="overflow-x:auto">
           <table style="width:100%;font-size:11px">
-            <thead><tr><th>رقم النظام</th><th>رقم المحل</th><th>العميل</th><th>المنتج</th><th>المبلغ</th><th>الحالة</th><th>التاريخ</th></tr></thead>
+            <thead><tr><th>رقم النظام</th><th>رقم المحل</th><th>العميل</th><th>الموظف</th><th>المنتج</th><th>نوع الطلب</th><th>المبلغ</th><th>الحالة</th><th>تاريخ الطلب</th><th>موعد الاستلام</th></tr></thead>
             <tbody>${rows.map(o=>`<tr>
               <td style="color:var(--gold)">#${o.id}</td>
               <td style="color:var(--gr)">${o.localInvoice||'-'}</td>
-              <td>${o.client}</td>
+              <td>${o.client}<div style="font-size:9px;color:var(--gr)">${o.phone||'-'}</div></td>
+              <td style="color:var(--gr)">${o.employee||'-'}</td>
               <td style="color:var(--gr)">${o.dressType||'-'}</td>
+              <td style="color:var(--gr)">${o.orderType||'-'}</td>
               <td style="font-weight:700">${(o.amount||0).toLocaleString()} ر.س</td>
               <td>${o.status||'-'}</td>
-              <td style="color:var(--gr)">${o.orderDate||'-'}</td>
+              <td style="color:var(--gr)">${repDispDate(o.orderDate)}</td>
+              <td style="color:var(--gr)">${repDispDate(o.deliveryDate)}</td>
             </tr>`).join('')}</tbody>
           </table>
         </div>
@@ -3119,16 +3141,17 @@ function renderReports(){
   if(delAcc){
     const delByMonth={};
     fDeliveries.forEach(d=>{
-      const dt=new Date(d.date);
-      const key=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
-      if(!delByMonth[key])delByMonth[key]=[];
-      delByMonth[key].push(d);
+      let key,label;
+      if(isRepHijri()){const hym=hijriYearMonth(d.date);key=hym.key;label=hym.label;}
+      else{const dt=new Date(d.date);key=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;}
+      if(!delByMonth[key])delByMonth[key]={rows:[],label};
+      delByMonth[key].rows.push(d);
     });
-    Object.keys(delByMonth).forEach(key=>delByMonth[key].sort((a,b)=>new Date(b.date)-new Date(a.date)));
+    Object.keys(delByMonth).forEach(key=>delByMonth[key].rows.sort((a,b)=>new Date(b.date)-new Date(a.date)));
     window._openDelMonths=window._openDelMonths||new Set();
     delAcc.innerHTML=Object.keys(delByMonth).sort().reverse().map(month=>{
-      const rows=delByMonth[month];
-      const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+      const rows=delByMonth[month].rows;
+      const mLabel=delByMonth[month].label||new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const mTotal=rows.reduce((s,d)=>s+(d.receivedAmount||0),0);
       const isOpen=window._openDelMonths.has(month);
       return`<details ${isOpen?'open':''} ontoggle="this.open?window._openDelMonths.add('${month}'):window._openDelMonths.delete('${month}')" style="margin-bottom:6px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
@@ -3142,7 +3165,7 @@ function renderReports(){
               <td>${d.client}</td>
               <td style="font-weight:700">${(d.receivedAmount||0).toLocaleString()} ر.س</td>
               <td style="color:var(--gr)">${d.payMethod||'-'}</td>
-              <td style="color:var(--gr)">${d.date||'-'}</td>
+              <td style="color:var(--gr)">${repDispDate(d.date)}</td>
             </tr>`).join('')}</tbody>
           </table>
         </div>
@@ -3156,10 +3179,11 @@ function renderReports(){
     // تجميع حسب الشهر ثم اليوم
     const expByMonth={};
     filtExp.forEach(e=>{
-      const d=new Date(e.date);
-      const mKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      let mKey,mLabelPre;
+      if(isRepHijri()){const hym=hijriYearMonth(e.date);mKey=hym.key;mLabelPre=hym.label;}
+      else{const d=new Date(e.date);mKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
       const dKey=e.date;
-      if(!expByMonth[mKey])expByMonth[mKey]={days:{},total:0,count:0};
+      if(!expByMonth[mKey])expByMonth[mKey]={days:{},total:0,count:0,label:mLabelPre};
       if(!expByMonth[mKey].days[dKey])expByMonth[mKey].days[dKey]=[];
       expByMonth[mKey].days[dKey].push(e);
       expByMonth[mKey].total+=(e.amount||0);
@@ -3167,13 +3191,13 @@ function renderReports(){
     });
     expAcc.innerHTML=Object.keys(expByMonth).sort().reverse().map(month=>{
       const mData=expByMonth[month];
-      const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+      const mLabel=mData.label||new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const daysHtml=Object.keys(mData.days).sort().reverse().map(day=>{
         const dayRows=mData.days[day];
         const dayTotal=dayRows.reduce((s,e)=>s+(e.amount||0),0);
         return`<details style="margin-bottom:4px;background:var(--d4);border-radius:2px">
           <summary style="padding:7px 12px;cursor:pointer;font-size:11px;display:flex;justify-content:space-between">
-            <span style="color:var(--white)">${day}</span>
+            <span style="color:var(--white)">${repDispDate(day)}</span>
             <span style="color:var(--red)">${dayTotal.toLocaleString()} ر.س (${dayRows.length})</span>
           </summary>
           <table style="width:100%;font-size:11px">
@@ -3238,9 +3262,10 @@ function renderReports(){
     // تجميع الحركات حسب الشهر ثم اليوم
     const movByMonth={};
     movements.forEach(m=>{
-      const d=new Date(m.date||'2000-01-01');
-      const mKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      if(!movByMonth[mKey])movByMonth[mKey]={days:{},total:0};
+      let mKey,mLabelPre;
+      if(isRepHijri()){const hym=hijriYearMonth(m.date||'2000-01-01');mKey=hym.key;mLabelPre=hym.label;}
+      else{const d=new Date(m.date||'2000-01-01');mKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
+      if(!movByMonth[mKey])movByMonth[mKey]={days:{},total:0,label:mLabelPre};
       if(!movByMonth[mKey].days[m.date])movByMonth[mKey].days[m.date]=[];
       movByMonth[mKey].days[m.date].push(m);
       movByMonth[mKey].total+=m.amount;
@@ -3248,13 +3273,13 @@ function renderReports(){
     const typeColors={'عربون':'#c9a84c','تسليم نهائي':'#27ae60','تسليم قديم':'#2980b9','تأمين محصّل':'#2980b9'};
     movAccEl.innerHTML=Object.keys(movByMonth).sort().map(month=>{
       const mData=movByMonth[month];
-      const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+      const mLabel=mData.label||new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const daysHtml=Object.keys(mData.days).sort().map(day=>{
         const rows=mData.days[day];
         const dayTotal=rows.reduce((s,m)=>s+m.amount,0);
         return`<details style="margin-bottom:3px;background:var(--d4);border-radius:2px">
           <summary style="padding:7px 12px;cursor:pointer;font-size:11px;display:flex;justify-content:space-between;list-style:none">
-            <span style="color:var(--white)">${day}</span>
+            <span style="color:var(--white)">${repDispDate(day)}</span>
             <span style="color:var(--green);font-weight:700">${dayTotal.toLocaleString()} ر.س <span style="color:var(--gr);font-weight:400">(${rows.length})</span></span>
           </summary>
           <table style="width:100%;font-size:11px">
@@ -3304,7 +3329,7 @@ function printReports(){
   const pa=document.getElementById('printArea');pa.style.display='block';
   pa.innerHTML=`<div style="font-family:Tajawal,sans-serif;direction:rtl;padding:16px;width:100%;max-width:700px;background:white;color:#111">
     <h2 style="text-align:center;margin-bottom:14px">${cfg.shopName||currentShop?.name||'نظام الإدارة'} - التقرير المالي</h2>
-    <p style="text-align:center;color:#888;margin-bottom:14px">${getReportDateRange().fromStr} إلى ${getReportDateRange().toStr}</p>
+    <p style="text-align:center;color:#888;margin-bottom:14px">${repDispDate(getReportDateRange().fromStr)} إلى ${repDispDate(getReportDateRange().toStr)}</p>
     ${document.getElementById('finGrid').outerHTML}
     ${document.getElementById('empRepTbl').closest('table').outerHTML}
     ${document.getElementById('monthTbl').closest('table').outerHTML}
@@ -4656,6 +4681,9 @@ async function editFullOrder(oid){
     if(sv('fPhone'))sv('fPhone').value=o.phone||'';
     if(sv('fODate')){sv('fODate').value=o.orderDate||'';if(typeof syncH==='function')syncH('fODate','fODateH');}
     if(sv('fDDate')){sv('fDDate').value=o.deliveryDate||'';if(typeof syncH==='function')syncH('fDDate','fDDateH');}
+    // استرجاع المنتجات الفعلية للطلب (كانت تُصفّر المبلغ تلقائيًا لأنها ما كانت تُستعاد)
+    _products=(o.extraItems&&o.extraItems.length)?o.extraItems.map(p=>({name:p.name||'',type:p.type||'',price:p.price||0})):[{name:'',type:'',price:0}];
+    if(typeof renderProducts==='function')renderProducts();
     if(sv('fAmt'))sv('fAmt').value=o.amount||'';
     if(sv('fDep'))sv('fDep').value=o.deposit||'';
     if(sv('fDepMeth'))sv('fDepMeth').value=o.payMethod||'نقدي';
@@ -4682,6 +4710,9 @@ async function updateFullOrder(oid){
     local_invoice:document.getElementById('fLocal')?.value||null,
     employee:document.getElementById('fEmp')?.value||'',
     client,phone:document.getElementById('fPhone')?.value||'',
+    dress_type:getProductsList().map(p=>p.name).filter(Boolean).join(' + ')||'',
+    order_type:getMainOrderType(),
+    extra_items:getProductsList(),
     order_date:document.getElementById('fODate')?.value,
     delivery_date:document.getElementById('fDDate')?.value,
     amount:parseFloat(document.getElementById('fAmt')?.value)||0,
@@ -4692,7 +4723,7 @@ async function updateFullOrder(oid){
     discount_value:parseFloat(document.getElementById('fDiscVal')?.value)||0,
     status:document.getElementById('fStatus')?.value||'',
     notes:document.getElementById('fNotes')?.value||'',
-  }).eq('id',oid);
+  }).eq('id',o.dbId);
   if(error){hideLoading();showToast('خطأ: '+error.message,'error');return;}
   await logAudit('تعديل طلب','orders',oid,'تعديل بيانات الطلب');
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('✅ تم حفظ التعديل','success');
@@ -4747,7 +4778,7 @@ async function saveDraftAsOrder(oid){
     status:document.getElementById('fStatus')?.value||'',
     notes:document.getElementById('fNotes')?.value||'',
     tracking:[{step:'استلام الطلب',sub:'',who:currentUser.name,when:new Date().toLocaleString('ar-SA')}],
-  }).eq('id',oid);
+  }).eq('id',o.dbId);
   if(error){hideLoading();showToast('خطأ: '+error.message,'error');return;}
   await fetchAll();hideLoading();closeModal();renderOrders();showToast('✅ تم تأكيد الطلب #'+inv,'success');
 }
