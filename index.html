@@ -339,6 +339,21 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
             <select class="fi" id="orderTypeF" onchange="renderOrders()"><option value="">كل الأنواع</option></select>
           <select class="fi" id="orderDraftF" onchange="renderOrders()"><option value="">الكل</option><option value="draft">مسودات فقط</option><option value="confirmed">مؤكدة فقط</option></select>
           </div>
+          <div class="filters" style="margin-top:6px">
+            <select class="fi" id="sortField" onchange="updateOrderSortSub();renderOrders()">
+              <option value="">— بدون فرز —</option>
+              <option value="status">الحالات</option>
+              <option value="employee">الموظفين</option>
+              <option value="product">المنتج</option>
+              <option value="orderType">نوع الطلب</option>
+              <option value="orderDate">تاريخ الطلب</option>
+              <option value="deliveryDate">موعد الاستلام</option>
+              <option value="amount">المبلغ</option>
+              <option value="remaining">المتبقي</option>
+              <option value="insurance">التأمين</option>
+            </select>
+            <select class="fi" id="sortSub1" style="display:none" onchange="renderOrders()"></select>
+          </div>
           <div style="overflow-x:auto"><table><thead><tr>
             <th>رقم المحل</th><th>رقم النظام</th><th>الموظف</th><th>العميل</th>
             <th>المنتج</th><th>نوع الطلب</th><th>تاريخ الطلب</th><th>موعد الاستلام</th>
@@ -469,9 +484,15 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
       <div class="topbar">
         <div><div class="pg-title">التقارير المالية</div></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input type="date" class="fi" id="repFrom" onchange="renderReports()">
-          <span style="color:var(--gr)">إلى</span>
-          <input type="date" class="fi" id="repTo" onchange="renderReports()">
+          <select class="fi" id="repCalType" onchange="rebuildReportDateInputs()">
+            <option value="g">📅 ميلادي</option>
+            <option value="h">🌙 هجري</option>
+          </select>
+          <select class="fi" id="repDateMode" onchange="rebuildReportDateInputs()">
+            <option value="range">نطاق تاريخ (من - إلى)</option>
+            <option value="single">يوم واحد فقط</option>
+          </select>
+          <div id="repDateInputs" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
           <button class="btn-sm" onclick="printReports()">🖨️ طباعة</button>
         </div>
       </div>
@@ -879,9 +900,7 @@ async function initApp(){
   });
   const now=new Date();
   document.getElementById('dashDate').textContent=now.toLocaleDateString('ar-SA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const f=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split('T')[0];
-  const t=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().split('T')[0];
-  document.getElementById('repFrom').value=f;document.getElementById('repTo').value=t;
+  rebuildReportDateInputs();
   if(currentUser.role==='manager')document.getElementById('btnAttRep').style.display='';
   populateFilters();startClock();checkDelivAlerts();updateLogoDisplay();
   // Show my pay info on salaries page for non-managers
@@ -891,10 +910,10 @@ async function initApp(){
   window._autoRefresh=setInterval(async()=>{
     await fetchAll();
     const pg=document.querySelector('.page.active')?.id;
-    if(pg==='pgOrders')renderOrders();
-    else if(pg==='pgDashboard')renderDashboard();
-    else if(pg==='pgExpenses')renderExpenses();
-    else if(pg==='pgReports')renderReports();
+    if(pg==='page-orders')renderOrders();
+    else if(pg==='page-dashboard')renderDashboard();
+    else if(pg==='page-expenses')renderExpenses();
+    else if(pg==='page-reports')renderReports();
   },3*60*1000);
 }
 
@@ -1105,7 +1124,7 @@ function checkDelivAlerts(){
 
 function showUpcomingOrders(){
   window._filterUpcoming=true;
-  switchPage('pgOrders');
+  switchPage('orders');
   setTimeout(()=>{renderOrders();window._filterUpcoming=false;},100);
 }
 function renderDashboard(){
@@ -1204,6 +1223,72 @@ function getOrderRowStyle(o){
   if(o.returned)return 'opacity:.55';
   return '';
 }
+// ===== فرز متعدد المستويات لشاشة الطلبات =====
+function updateOrderSortSub(){
+  const field=document.getElementById('sortField')?.value||'';
+  const sub=document.getElementById('sortSub1');if(!sub)return;
+  if(!field){sub.style.display='none';sub.innerHTML='';return;}
+  sub.style.display='';
+  if(field==='status'){
+    const steps=[...(cfg.trackingSteps||[]).map(s=>s.name),'الحمدلله'];
+    sub.innerHTML='<option value="">كل الحالات</option>'+steps.map(s=>`<option value="${s}">${s}</option>`).join('');
+  }else if(field==='employee'){
+    sub.innerHTML='<option value="">كل الموظفين</option>'+db.users.map(u=>`<option value="${u.name}">${u.name}</option>`).join('');
+  }else if(field==='product'){
+    sub.innerHTML='<option value="">كل المنتجات</option>'+(cfg.products||[]).map(p=>`<option value="${p}">${p}</option>`).join('');
+  }else if(field==='orderType'){
+    sub.innerHTML='<option value="">كل الأنواع</option>'+(cfg.orderTypes||[]).map(t=>`<option value="${t}">${t}</option>`).join('');
+  }else if(field==='orderDate'||field==='deliveryDate'){
+    sub.innerHTML='<option value="desc">الأحدث أولاً (تنازلي)</option><option value="asc">الأقدم أولاً (تصاعدي)</option>';
+  }else if(field==='amount'||field==='remaining'){
+    sub.innerHTML='<option value="desc">من الأعلى إلى الأقل</option><option value="asc">من الأقل إلى الأعلى</option>';
+  }else if(field==='insurance'){
+    sub.innerHTML='<option value="">كل الحالات</option><option value="pending">عند الطلب (لم يُحصَّل)</option><option value="collected">تم التحصيل</option><option value="returned">تم التسليم (مسترد)</option>';
+  }
+}
+function applyOrderSort(list){
+  const field=document.getElementById('sortField')?.value||'';
+  const sub=document.getElementById('sortSub1')?.value||'';
+  if(!field)return list;
+  if(field==='status'){
+    return sub?list.filter(o=>o.status===sub):list;
+  }
+  if(field==='employee'){
+    return sub?list.filter(o=>o.employee===sub):list;
+  }
+  if(field==='product'){
+    return sub?list.filter(o=>o.dressType===sub):list;
+  }
+  if(field==='orderType'){
+    return sub?list.filter(o=>o.orderType===sub):list;
+  }
+  if(field==='orderDate'){
+    const dir=sub==='asc'?1:-1;
+    return [...list].sort((a,b)=>dir*(new Date(a.orderDate||0)-new Date(b.orderDate||0)));
+  }
+  if(field==='deliveryDate'){
+    const dir=sub==='asc'?1:-1;
+    return [...list].sort((a,b)=>dir*(new Date(a.deliveryDate||0)-new Date(b.deliveryDate||0)));
+  }
+  if(field==='amount'){
+    const dir=sub==='asc'?1:-1;
+    return [...list].sort((a,b)=>dir*((a.amount||0)-(b.amount||0)));
+  }
+  if(field==='remaining'){
+    const dir=sub==='asc'?1:-1;
+    return [...list].sort((a,b)=>dir*(calcRem(a)-calcRem(b)));
+  }
+  if(field==='insurance'){
+    if(!sub)return list;
+    return list.filter(o=>{
+      if(sub==='pending')return o.insurance>0&&!o.insuranceCollected&&!o.insuranceReturned;
+      if(sub==='collected')return o.insurance>0&&o.insuranceCollected&&!o.insuranceReturned;
+      if(sub==='returned')return o.insurance>0&&o.insuranceReturned;
+      return true;
+    });
+  }
+  return list;
+}
 function renderOrders(){
   // إظهار/إخفاء أعمدة المبالغ حسب الصلاحية
   const canAmt=currentUser.role==='manager'||currentUser.role==='accountant'||canDo('canViewAmounts');
@@ -1260,6 +1345,7 @@ function renderOrders(){
     const draftMatch=!draftF||(draftF==='draft'&&o.isDraft)||(draftF==='confirmed'&&!o.isDraft);
     return ms&&(!stF||o.status===stF)&&(!tyF||o.orderType===tyF)&&draftMatch;
   });
+  list=applyOrderSort(list);
   const canDel=currentUser.role==='manager';
   document.getElementById('ordersTbl').innerHTML=list.map(o=>{
     const disc=calcDisc(o);const h=(o.tracking||[]).slice(-1)[0];const rem=calcRem(o);
@@ -1267,7 +1353,7 @@ function renderOrders(){
       <td style="color:var(--gr);font-size:11px">${o.localInvoice||'-'}</td>
       <td><strong style="color:var(--gold);cursor:pointer" onclick="showQR(${o.id})">#${o.id} 🔳</strong></td>
       <td style="font-size:11px">${o.employee||'-'}</td>
-      <td><div style="font-weight:600">${o.client}${o.returned?` <span class="badge b-red">مرتجع</span>`:''} ${o.isDraft?`<span class="badge b-gray">مسودة</span>`:''}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
+      <td><div style="font-weight:600${o.returned?';text-decoration:line-through;color:#555':''}">${o.client}${o.returned?` <span class="badge" style="background:#3a3a3a;color:#bbb;text-decoration:none">مرتجع</span>`:''} ${o.isDraft?`<span class="badge b-gray">مسودة</span>`:''}</div><div style="font-size:10px;color:var(--gr)">${o.phone||''}</div></td>
       <td style="font-size:11px">${o.dressType||'-'}</td>
       <td style="font-size:11px">${o.orderType||'-'}</td>
       <td style="font-size:11px"><div>${o.orderDate||'-'}</div><div style="font-size:9px;color:var(--gold)">${o.orderDate?toHijri(o.orderDate):''}</div></td>
@@ -1282,13 +1368,11 @@ function renderOrders(){
       <td>${getStatusBadge(o.status)}<div style="font-size:10px;color:var(--gold);margin-top:2px">👤 ${h?h.who:(o.employee||'-')}</div></td>
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         <button class="btn-sm" onclick="showTracking(${o.id})">تتبع</button>
-        ${(currentUser.role==='manager'||canDo('canEditOrders'))?`<button class="btn-sm" onclick="openEditOrderModal(${o.id})">✏️ تعديل</button>`:''}
         ${o.isDraft?`<button class="btn-sm green" onclick="confirmDraft(${o.id})">✅ تأكيد</button>
           <button class="btn-sm" onclick="editOrderDraft(${o.id})">✏️ إكمال الطلب</button>`:`<button class="btn-sm blue" onclick="openOrderActions(${o.id})">إجراءات</button>`}
         <button class="btn-sm green" onclick="printInvoice(${o.id})">🖨️ فاتورة</button>
         <button class="btn-sm" onclick="printMeasurements(${o.id})">📐 مقاسات</button>
         <button class="btn-sm" onclick="printPayInvoice(${o.id})">إيصال</button>
-        <button class="btn-sm blue" onclick="openMeasurementsModal(${o.id})">📐 مقاسات</button>
         ${canDel?`<button class="btn-sm red" onclick="deleteOrder(${o.id})">حذف</button>`:''}
       </div></td>
     </tr>`;
@@ -1581,11 +1665,13 @@ function openOrderActions(orderId){
           <div style="font-size:11px;color:var(--blue);margin-bottom:8px;padding:6px;background:rgba(41,128,185,.1);border-radius:2px">✅ تم التحصيل بتاريخ ${o.insuranceCollectDate||''}</div>`}
           ${o.insuranceCollected&&!o.insuranceReturned?`
           <div style="background:var(--d4);padding:9px;border-radius:2px;border-right:3px solid var(--orange)">
-            <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px">↩️ استرداد التأمين (يُسجَّل كخرج)</div>
-            <div style="display:flex;gap:8px;align-items:flex-end">
-              <div class="fg" style="margin:0;flex:1"><label style="font-size:10px">تاريخ الاسترداد</label><input type="date" id="insRetDate" value=""></div>
+            <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px">↩️ تسليم التأمين (يُسجَّل كخرج)</div>
+            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+              <div class="fg" style="margin:0;flex:1"><label style="font-size:10px">تاريخ التسليم</label><input type="date" id="insRetDate" value=""></div>
+              <div class="fg" style="margin:0;flex:1"><label style="font-size:10px">المبلغ المسترد</label><input type="number" id="insRetAmt" value="${o.insurance||0}"></div>
               <button class="btn-add" style="margin-bottom:0;background:var(--orange);color:white;border:none" onclick="saveInsuranceReturn(${orderId})">تسجيل الخرج</button>
             </div>
+            <div style="font-size:10px;color:var(--gr);margin-top:6px">المبلغ الأصلي للتأمين ${(o.insurance||0).toLocaleString()} ر.س — عدّل المبلغ إذا خُصم منه مقابل قطع أو أضرار بالفستان.</div>
           </div>`:''}
           ${o.insuranceReturned?`<div style="font-size:11px;color:var(--green);padding:6px;background:rgba(39,174,96,.1);border-radius:2px">✅ تم الاسترداد بتاريخ ${o.insuranceReturnDate||''}</div>`:''}
           ${o.insuranceCancelled?`<div style="font-size:11px;color:var(--gr);padding:6px;background:var(--d4);border-radius:2px">🚫 التأمين ملغي</div>`:''}
@@ -1647,6 +1733,7 @@ function openOrderActions(orderId){
             ✅ تأكيد التسليم النهائي
           </button>`}
         </div>`:''}
+        <div style="margin-top:8px"><button class="btn-sm blue" style="width:100%;padding:7px" onclick="openMeasurementsModal(${orderId})">📐 إدخال المقاسات</button></div>
       </div>
     </div>
   </div>`;
@@ -1765,16 +1852,20 @@ async function saveInsuranceReturn(oid){
   const o=db.orders.find(x=>x.id===oid);if(!o)return;
   const dt=document.getElementById('insRetDate')?.value||new Date().toISOString().split('T')[0];
   const insAmt=o.insurance||0;
+  // المبلغ المسترد الفعلي قد يختلف عن التأمين الأصلي (خصم مقابل قطع/أضرار بالفستان)
+  const retAmt=parseFloat(document.getElementById('insRetAmt')?.value)??insAmt;
+  const finalRetAmt=isNaN(retAmt)?insAmt:retAmt;
   showLoading('...');
   await sb.from('orders').update({insurance_returned:true,insurance_return_date:dt}).eq('id',o.dbId);
+  // الفرق عن التأمين الأصلي لا يُسجَّل دخل إضافي (مسجل سابقًا عند التحصيل)، فقط المبلغ المسلَّم فعليًا يُسجَّل كخرج
   await sb.from('expenses').insert({
     shop_id:currentShop?.id||1,date:dt,
-    cat_main:'تأمين',cat_sub:'استرداد تأمين طلب',
-    description:`استرداد تأمين طلب #${oid} - ${o.client}`,
-    amount:insAmt,
+    cat_main:'تأمين',cat_sub:'تسليم تأمين طلب',
+    description:`تسليم تأمين طلب #${oid} - ${o.client}`,
+    amount:finalRetAmt,
   });
-  await logAudit('استرداد تأمين','orders',oid,`${insAmt} ر.س`);
-  await fetchAll();hideLoading();closeModal();renderOrders();showToast('✅ تم تسجيل الاسترداد كخرج','success');
+  await logAudit('تسليم تأمين','orders',oid,`${finalRetAmt} ر.س (الأصلي: ${insAmt} ر.س)`);
+  await fetchAll();hideLoading();closeModal();renderOrders();showToast('✅ تم تسجيل تسليم التأمين كخرج','success');
 }
 
 async function cancelInsurance(oid){
@@ -2733,9 +2824,66 @@ function printReturnInvoice(o,amt,date,items,type){
 }
 
 // ===== REPORTS =====
+// ===== إعداد حقول التاريخ بالتقارير (هجري/ميلادي - نطاق/يوم واحد) =====
+function rebuildReportDateInputs(){
+  const wrap=document.getElementById('repDateInputs');if(!wrap)return;
+  const calType=document.getElementById('repCalType')?.value||'g';
+  const mode=document.getElementById('repDateMode')?.value||'range';
+  const now=new Date();
+  const defFrom=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split('T')[0];
+  const defTo=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().split('T')[0];
+  const today=now.toISOString().split('T')[0];
+  if(calType==='g'){
+    if(mode==='single'){
+      wrap.innerHTML=`<input type="date" class="fi" id="repDay" value="${today}" onchange="renderReports()">`;
+    }else{
+      wrap.innerHTML=`<input type="date" class="fi" id="repFrom" value="${defFrom}" onchange="renderReports()">
+        <span style="color:var(--gr)">إلى</span>
+        <input type="date" class="fi" id="repTo" value="${defTo}" onchange="renderReports()">`;
+    }
+  }else{
+    // هجري: حقول نصية بصيغة ١٤٤٦/٠١/٠١ يتم تحويلها تلقائياً للميلادي عند العرض
+    const todayH=toHijri(today);
+    const fromH=toHijri(defFrom);
+    const toH=toHijri(defTo);
+    if(mode==='single'){
+      wrap.innerHTML=`<input type="text" class="fi" id="repDayH" placeholder="١٤٤٦/٠١/٠١" value="${todayH}" onchange="renderReports()">`;
+    }else{
+      wrap.innerHTML=`<input type="text" class="fi" id="repFromH" placeholder="١٤٤٦/٠١/٠١" value="${fromH}" onchange="renderReports()">
+        <span style="color:var(--gr)">إلى</span>
+        <input type="text" class="fi" id="repToH" placeholder="١٤٤٦/١٢/٢٩" value="${toH}" onchange="renderReports()">`;
+    }
+  }
+  renderReports();
+}
+// يحسب تاريخي البداية والنهاية الفعليين (ميلادي) بناءً على وضع التقارير الحالي
+function getReportDateRange(){
+  const calType=document.getElementById('repCalType')?.value||'g';
+  const mode=document.getElementById('repDateMode')?.value||'range';
+  let fromStr,toStr;
+  if(calType==='g'){
+    if(mode==='single'){
+      const d=document.getElementById('repDay')?.value;
+      fromStr=toStr=d;
+    }else{
+      fromStr=document.getElementById('repFrom')?.value;
+      toStr=document.getElementById('repTo')?.value;
+    }
+  }else{
+    if(mode==='single'){
+      const d=hijriToGregorian(document.getElementById('repDayH')?.value);
+      fromStr=toStr=d;
+    }else{
+      fromStr=hijriToGregorian(document.getElementById('repFromH')?.value);
+      toStr=hijriToGregorian(document.getElementById('repToH')?.value);
+    }
+  }
+  return{fromStr:fromStr||new Date().toISOString().split('T')[0],toStr:toStr||new Date().toISOString().split('T')[0]};
+}
 function renderReports(){
-  const from=new Date(document.getElementById('repFrom').value);
-  const to=new Date(document.getElementById('repTo').value);to.setHours(23,59,59);
+  const{fromStr,toStr}=getReportDateRange();
+  const from=new Date(fromStr);
+  const to=new Date(toStr);to.setHours(23,59,59);
   const fOrders=db.orders.filter(o=>!o.isDraft&&o.orderDate&&(new Date(o.orderDate))>=from&&(new Date(o.orderDate))<=to);
   const fExp=activeExpenseRows().filter(e=>{const d=new Date(e.date);return d>=from&&d<=to;});
   const fReturns=db.returns.filter(r=>{const d=new Date(r.date);return d>=from&&d<=to&&!isOrphanReturn(r);});
@@ -2924,21 +3072,27 @@ function renderReports(){
   // ===== الكشف التفصيلي - الطلبات =====
   const ordAcc=document.getElementById('ordersDetailAccordion');
   if(ordAcc){
-    // تجميع حسب الشهر مع ترتيب بالتاريخ
+    // تجميع حسب الشهر — ترتيب تنازلي داخل كل شهر (الأحدث تاريخ طلب أولاً، ثم تاريخ التسليم)
     const ordByMonth={};
     const allPeriodOrders=db.orders.filter(o=>!o.isDraft&&o.orderDate&&dateInRange(o.orderDate,from,to));
-    allPeriodOrders.sort((a,b)=>new Date(a.orderDate)-new Date(b.orderDate));
+    allPeriodOrders.sort((a,b)=>{
+      const byOrderDate=new Date(b.orderDate)-new Date(a.orderDate);
+      if(byOrderDate!==0)return byOrderDate;
+      return new Date(b.deliveryDate||0)-new Date(a.deliveryDate||0);
+    });
     allPeriodOrders.forEach(o=>{
       const d=new Date(o.orderDate);
       const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       if(!ordByMonth[key])ordByMonth[key]=[];
       ordByMonth[key].push(o);
     });
+    window._openOrdMonths=window._openOrdMonths||new Set();
     ordAcc.innerHTML=Object.keys(ordByMonth).sort().reverse().map(month=>{
       const rows=ordByMonth[month];
       const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const mTotal=rows.reduce((s,o)=>s+(o.amount||0),0);
-      return`<details style="margin-bottom:6px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
+      const isOpen=window._openOrdMonths.has(month);
+      return`<details ${isOpen?'open':''} ontoggle="this.open?window._openOrdMonths.add('${month}'):window._openOrdMonths.delete('${month}')" style="margin-bottom:6px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
         <summary style="padding:9px 12px;cursor:pointer;font-size:12px;font-weight:700;color:var(--gold);display:flex;justify-content:space-between;list-style:none">
           <span>${mLabel}</span><span style="color:var(--gr)">${rows.length} طلب · ${mTotal.toLocaleString()} ر.س</span>
         </summary>
@@ -2970,11 +3124,14 @@ function renderReports(){
       if(!delByMonth[key])delByMonth[key]=[];
       delByMonth[key].push(d);
     });
+    Object.keys(delByMonth).forEach(key=>delByMonth[key].sort((a,b)=>new Date(b.date)-new Date(a.date)));
+    window._openDelMonths=window._openDelMonths||new Set();
     delAcc.innerHTML=Object.keys(delByMonth).sort().reverse().map(month=>{
       const rows=delByMonth[month];
       const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const mTotal=rows.reduce((s,d)=>s+(d.receivedAmount||0),0);
-      return`<details style="margin-bottom:6px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
+      const isOpen=window._openDelMonths.has(month);
+      return`<details ${isOpen?'open':''} ontoggle="this.open?window._openDelMonths.add('${month}'):window._openDelMonths.delete('${month}')" style="margin-bottom:6px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
         <summary style="padding:9px 12px;cursor:pointer;font-size:12px;font-weight:700;color:var(--gold);display:flex;justify-content:space-between">
           <span>${mLabel}</span><span style="color:var(--gr)">${rows.length} تسليم · ${mTotal.toLocaleString()} ر.س</span>
         </summary>
@@ -3147,7 +3304,7 @@ function printReports(){
   const pa=document.getElementById('printArea');pa.style.display='block';
   pa.innerHTML=`<div style="font-family:Tajawal,sans-serif;direction:rtl;padding:16px;width:100%;max-width:700px;background:white;color:#111">
     <h2 style="text-align:center;margin-bottom:14px">${cfg.shopName||currentShop?.name||'نظام الإدارة'} - التقرير المالي</h2>
-    <p style="text-align:center;color:#888;margin-bottom:14px">${document.getElementById('repFrom').value} إلى ${document.getElementById('repTo').value}</p>
+    <p style="text-align:center;color:#888;margin-bottom:14px">${getReportDateRange().fromStr} إلى ${getReportDateRange().toStr}</p>
     ${document.getElementById('finGrid').outerHTML}
     ${document.getElementById('empRepTbl').closest('table').outerHTML}
     ${document.getElementById('monthTbl').closest('table').outerHTML}
@@ -3166,9 +3323,37 @@ function renderEmployees(){
       <div style="font-size:10px;color:var(--gr);margin-top:2px">@${u.username} · ${u.job}</div>
       <div style="font-size:10px;color:var(--green);margin-top:2px">راتب: ${(u.baseSalary||0).toLocaleString()} ر.س</div>
       <div style="display:flex;gap:6px;justify-content:center;margin-top:11px">
-        ${currentUser.role==='manager'?`<button class="btn-sm" onclick="openEmpModal(${u.id})">تعديل</button>${u.id!==currentUser.id?`<button class="btn-sm red" onclick="deleteEmp(${u.id})">حذف</button>`:''}`:''}
+        ${currentUser.role==='manager'?`<button class="btn-sm" onclick="openEmpModal(${u.id})">تعديل</button><button class="btn-sm blue" onclick="openMergeNameModal(${u.id})">🔗 دمج اسم قديم</button>${u.id!==currentUser.id?`<button class="btn-sm red" onclick="deleteEmp(${u.id})">حذف</button>`:''}`:''}
       </div>
     </div>`).join('');
+}
+
+// دمج اسم قديم (نص حر) بموظف حالي — لتصحيح بيانات سابقة انقسمت بين اسمين لنفس الشخص
+function openMergeNameModal(empId){
+  const emp=db.users.find(u=>u.id===empId);if(!emp)return;
+  document.getElementById('MC').innerHTML=`
+  <div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal modal-sm">
+      <div class="m-hdr"><div class="m-ttl">🔗 دمج اسم قديم بـ${emp.name}</div><button class="m-close" onclick="closeModal()">×</button></div>
+      <div class="m-body">
+        <div style="font-size:11px;color:var(--gr);margin-bottom:10px">إذا كان هذا الموظف مسجّل سابقاً بأسماء مختلفة في الطلبات والرواتب (بسبب تغيير الاسم قبل هذا التحديث)، اكتب الاسم القديم هنا وسيتم دمج كل سجلاته تحت الاسم الحالي "${emp.name}".</div>
+        <div class="fg ffull"><label>الاسم القديم المراد دمجه</label><input type="text" id="mergeOldName" placeholder="مثال: أبو عمر"></div>
+      </div>
+      <div class="m-foot">
+        <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+        <button class="btn-primary" style="width:auto;padding:9px 22px" onclick="doMergeOldName(${empId})">دمج</button>
+      </div>
+    </div>
+  </div>`;
+}
+async function doMergeOldName(empId){
+  const emp=db.users.find(u=>u.id===empId);if(!emp)return;
+  const oldName=document.getElementById('mergeOldName')?.value.trim();
+  if(!oldName){showToast('اكتب الاسم القديم','error');return;}
+  showLoading('جاري الدمج...');
+  await cascadeEmployeeRename(empId,oldName,emp.name);
+  await fetchAll();hideLoading();closeModal();renderEmployees();
+  showToast('✅ تم دمج السجلات القديمة','success');
 }
 
 function openEmpModal(empId=null){
@@ -3210,9 +3395,15 @@ async function saveEmp(empId){
   showLoading('...');
   try{
     if(empId){
+      const oldEmp=db.users.find(u=>u.id===empId);
+      const oldName=oldEmp?.name||'';
       const upd={name,username,role,job,base_salary:salary};
       if(pwd){upd.password=await hashPwd(pwd);}
       await sb.from('users').update(upd).eq('id',empId);
+      // لو تغيّر الاسم، ندمج كل السجلات القديمة تلقائياً تحت الاسم الجديد بدل ما تنقسم كموظف مختلف
+      if(oldName&&oldName!==name){
+        await cascadeEmployeeRename(empId,oldName,name);
+      }
       showToast('تم التحديث ✓','success');
     }else{
       if(!pwd){hideLoading();showToast('أدخل كلمة مرور','error');return;}
@@ -3222,6 +3413,25 @@ async function saveEmp(empId){
     }
     await fetchAll();hideLoading();closeModal();renderEmployees();
   }catch(e){hideLoading();showToast('خطأ: اسم مستخدم مكرر','error');}
+}
+
+// دمج اسم موظف قديم بكل مكان بالنظام بعد تغييره (بنفس الفرع)
+async function cascadeEmployeeRename(empId,oldName,newName){
+  const sid=currentShop?.id||1;
+  // 1) الطلبات: حقل الموظف مباشرة
+  await sb.from('orders').update({employee:newName}).eq('shop_id',sid).eq('employee',oldName);
+  // 2) الطلبات: سجل التتبع (who) — تحديث كل طلب فيه اسم قديم داخل مصفوفة tracking
+  const ordersToFix=db.orders.filter(o=>(o.tracking||[]).some(t=>t.who===oldName));
+  for(const o of ordersToFix){
+    const newTracking=(o.tracking||[]).map(t=>t.who===oldName?{...t,who:newName}:t);
+    await sb.from('orders').update({tracking:newTracking}).eq('id',o.dbId||o.id);
+  }
+  // 3) الرواتب والسحبيات: مرتبطة بالفعل عبر employee_id، لكن نحدّث الاسم المخزّن للعرض التاريخي
+  await sb.from('salaries').update({employee_name:newName}).eq('shop_id',sid).eq('employee_id',empId);
+  // 4) المصروفات: بنود الرواتب/السحبيات المسجلة باسم الموظف كبند فرعي
+  await sb.from('expenses').update({cat_sub:newName}).eq('shop_id',sid).eq('cat_main','رواتب').eq('cat_sub',oldName);
+  await sb.from('expenses').update({cat_sub:newName}).eq('shop_id',sid).eq('cat_main','سحبيات').eq('cat_sub',oldName);
+  await logAudit('دمج اسم موظف','users',empId,`${oldName} ← ${newName}`);
 }
 
 async function deleteEmp(id){
@@ -4482,7 +4692,6 @@ async function updateFullOrder(oid){
     discount_value:parseFloat(document.getElementById('fDiscVal')?.value)||0,
     status:document.getElementById('fStatus')?.value||'',
     notes:document.getElementById('fNotes')?.value||'',
-    updated_at:new Date().toISOString(),
   }).eq('id',oid);
   if(error){hideLoading();showToast('خطأ: '+error.message,'error');return;}
   await logAudit('تعديل طلب','orders',oid,'تعديل بيانات الطلب');
@@ -4913,6 +5122,7 @@ async function switchShop(shopId){
   showLoading('تحميل '+currentShop.name+'...');
   await loadSettings();
   await fetchAll();
+  populateFilters();
   hideLoading();
   // Update sidebar
   const sbSub=document.getElementById('sbShopSub');
@@ -4980,9 +5190,15 @@ function renumberExpRows(){
 
 function updateExpSubsRow(sel){
   const m=sel.value;
-  const cat=(cfg.expCats||[]).find(c=>c.name===m);
   const subSel=sel.closest('.exp-item-row').querySelector('.exp-cats');
-  if(subSel)subSel.innerHTML=(cat?.subs||[]).map(s=>`<option>${s}</option>`).join('');
+  if(!subSel)return;
+  // بند "سحبيات" يعرض قائمة الموظفين المحفوظة بالنظام (نفس قائمة شاشة الرواتب والسحبيات) بدل قائمة ثابتة
+  if(m==='سحبيات'){
+    subSel.innerHTML=(db.users||[]).map(u=>`<option value="${u.name}" data-emp-id="${u.id}">${u.name}</option>`).join('');
+    return;
+  }
+  const cat=(cfg.expCats||[]).find(c=>c.name===m);
+  subSel.innerHTML=(cat?.subs||[]).map(s=>`<option>${s}</option>`).join('');
 }
 
 function calcExpMultiTotal(){
@@ -5000,7 +5216,9 @@ async function saveMultiExpense(){
   rows.forEach(row=>{
     const amt=parseFloat(row.querySelector('.exp-amt')?.value)||0;
     const catM=row.querySelector('.exp-catm')?.value||'';
-    const catS=row.querySelector('.exp-cats')?.value||'';
+    const catSSel=row.querySelector('.exp-cats');
+    const catS=catSSel?.value||'';
+    const empId=catM==='سحبيات'?parseInt(catSSel?.selectedOptions?.[0]?.dataset?.empId)||null:null;
     const desc=row.querySelector('.exp-desc')?.value||'';
     // فقط البنود اللي عندها مبلغ وبند رئيسي
     if(amt>0&&catM)items.push({
@@ -5009,20 +5227,38 @@ async function saveMultiExpense(){
       description:desc||null,
       amount:amt,
       date,
-      shop_id:currentShop?.id||1
+      shop_id:currentShop?.id||1,
+      empId
     });
   });
   if(!items.length){showToast('أضف بنداً واحداً على الأقل بمبلغ وبند رئيسي','error');return;}
   showLoading('جاري الحفظ...');
   // أدخل بند بند لتجنب فشل الكامل لو في خطأ بسجل واحد
   let saved=0,failed=0;
+  const autoMonth=(date||'').slice(0,7);
   for(const item of items){
-    const{error}=await sb.from('expenses').insert(item);
+    const{empId,...expRow}=item; // empId مو عمود بجدول expenses، يُستخدم فقط لمزامنة السحبيات
+    const{error}=await sb.from('expenses').insert(expRow);
     if(error){
-      console.error('خطأ في حفظ المصروف:',error,item);
+      console.error('خطأ في حفظ المصروف:',error,expRow);
       failed++;
-    } else {
-      saved++;
+      continue;
+    }
+    saved++;
+    // مزامنة تلقائية: أي بند "سحبيات" لموظف يُسجَّل أيضاً في شاشة الرواتب والسحبيات
+    if(item.cat_main==='سحبيات'&&empId){
+      const emp=db.users.find(u=>u.id===empId);
+      await sb.from('salaries').insert({
+        shop_id:currentShop?.id||1,
+        employee_id:empId,
+        employee_name:emp?.name||item.cat_sub||'',
+        type:'withdrawal',
+        amount:item.amount,
+        base_salary:emp?.baseSalary||0,
+        month:autoMonth,date,
+        notes:item.description||'',
+        created_by:currentUser.name
+      });
     }
   }
   if(saved>0)await logAudit('إضافة مصروفات','expenses',0,`${saved} بند - ${date}`);
