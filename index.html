@@ -442,6 +442,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
         <select class="fi" id="salEmpF" onchange="renderSalaries()"><option value="">كل الموظفين</option></select>
         <select class="fi" id="salTypeF" onchange="renderSalaries()"><option value="">الكل</option><option value="salary">رواتب</option><option value="withdrawal">سحبيات</option></select>
         <select class="fi" id="salMonF" onchange="renderSalaries()"><option value="">كل الشهور</option></select>
+        <button class="btn-sm" id="btnSalCal" onclick="toggleSalCalendar()" style="background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.3)">📅 ميلادي</button>
       </div>
       <div id="salAccordion"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-radius:2px;margin-top:6px;border-right:3px solid var(--green)">
@@ -461,6 +462,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
         <select class="fi" id="expSubF" onchange="renderExpenses()"><option value="">كل البنود الفرعية</option></select>
         <input type="date" class="fi" id="expFromF" onchange="renderExpenses()">
         <input type="date" class="fi" id="expToF" onchange="renderExpenses()">
+        <button class="btn-sm" id="btnExpCal" onclick="toggleExpCalendar()" style="background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.3)">📅 ميلادي</button>
       </div>
       <div id="expAccordionMain"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;background:var(--d3);padding:10px 14px;border-radius:2px;margin-top:6px;border-right:3px solid var(--red)">
@@ -950,7 +952,13 @@ function populateFilters(){
   const sm=document.getElementById('salMonF');
   if(sm){
     let ops='<option value="">كل الشهور</option>';
-    for(let i=0;i<12;i++){const d=new Date();d.setMonth(d.getMonth()-i);const v=d.toISOString().slice(0,7);ops+=`<option value="${v}">${v}</option>`;}
+    const prevSm=sm.value;
+    for(let i=0;i<12;i++){
+      const d=new Date();d.setMonth(d.getMonth()-i);
+      const v=d.toISOString().slice(0,7);
+      const label=window._salHijri?hijriYearMonth(d.toISOString().split('T')[0]).label:v;
+      ops+=`<option value="${v}" ${v===prevSm?'selected':''}>${label}</option>`;
+    }
     sm.innerHTML=ops;
   }
   const ae=document.getElementById('arEmp');
@@ -2298,6 +2306,14 @@ function printAttRep(){
 }
 
 // ===== SALARIES =====
+// يبدّل بين عرض الأشهر بالميلادي والهجري بشاشة الرواتب والسحبيات
+function toggleSalCalendar(){
+  window._salHijri=!window._salHijri;
+  const btn=document.getElementById('btnSalCal');
+  if(btn)btn.textContent=window._salHijri?'🌙 هجري':'📅 ميلادي';
+  populateFilters();
+  renderSalaries();
+}
 function renderSalaries(){
   const canManage=currentUser.role==='manager'||currentUser.role==='accountant';
   const isEmp=!canManage;
@@ -2345,11 +2361,14 @@ function renderSalaries(){
   // بحث
   const salSearch=(document.getElementById('salSearch')?.value||'').toLowerCase();
   if(salSearch)list=list.filter(s=>(db._empName(s.empId,s.empName)||'').toLowerCase().includes(salSearch));
-  // تجميع بالشهر
+  // تجميع بالشهر (هجري أو ميلادي حسب الزر)
   const byMonth={};
+  const useSalHijri=!!window._salHijri;
   list.forEach(s=>{
-    const key=s.month||s.date?.slice(0,7)||'غير محدد';
-    if(!byMonth[key])byMonth[key]={rows:[],totalSal:0,totalWith:0};
+    let key,label;
+    if(useSalHijri&&s.date){const hym=hijriYearMonth(s.date);key=hym.key;label=hym.label;}
+    else{key=s.month||s.date?.slice(0,7)||'غير محدد';label=key;}
+    if(!byMonth[key])byMonth[key]={rows:[],totalSal:0,totalWith:0,label};
     byMonth[key].rows.push(s);
     if(s.type==='salary')byMonth[key].totalSal+=(s.amount||0);
     else byMonth[key].totalWith+=(s.amount||0);
@@ -2367,7 +2386,7 @@ function renderSalaries(){
         <td style="color:var(--gr)">${(s.baseSalary||0).toLocaleString()} ر.س</td>
         <td style="font-weight:700;color:${s.type==='salary'?'var(--green)':'var(--orange)'}">${(s.amount||0).toLocaleString()} ر.س</td>
         <td style="color:var(--gr)">${s.notes||'-'}</td>
-        <td>${s.date||''}</td>
+        <td>${useSalHijri&&s.date?toHijri(s.date):(s.date||'')}</td>
         <td style="color:var(--gr);font-size:10px">${s.createdBy||''}</td>
         <td><div style="display:flex;gap:4px">
           ${canEdit?`<button class="btn-sm blue" onclick="openEditSalary(${s.id})">تعديل</button>`:''}
@@ -2376,7 +2395,7 @@ function renderSalaries(){
       </tr>`).join('');
       return`<details style="margin-bottom:8px;background:var(--d3);border-radius:2px;border:1px solid var(--d4)">
         <summary style="padding:9px 14px;cursor:pointer;font-size:12px;font-weight:700;display:flex;justify-content:space-between;list-style:none">
-          <span style="color:var(--gold)">${month}</span>
+          <span style="color:var(--gold)">${mData.label||month}</span>
           <span style="font-size:11px;color:var(--gr)">رواتب: <span style="color:var(--green)">${mData.totalSal.toLocaleString()}</span> · سحبيات: <span style="color:var(--orange)">${mData.totalWith.toLocaleString()}</span></span>
         </summary>
         <div style="overflow-x:auto">
@@ -2540,6 +2559,13 @@ async function saveMultiWithdraw(){
 }
 
 // ===== EXPENSES =====
+// يبدّل بين عرض الأشهر بالميلادي والهجري بشاشة المصروفات
+function toggleExpCalendar(){
+  window._expHijri=!window._expHijri;
+  const btn=document.getElementById('btnExpCal');
+  if(btn)btn.textContent=window._expHijri?'🌙 هجري':'📅 ميلادي';
+  renderExpenses();
+}
 function renderExpenses(){
   const catF=document.getElementById('expCatF');
   const subF=document.getElementById('expSubF');
@@ -2566,13 +2592,15 @@ function renderExpenses(){
   if(search)list=list.filter(e=>(e.description||'').toLowerCase().includes(search)||(e.catMain||'').toLowerCase().includes(search)||(e.catSub||'').toLowerCase().includes(search));
   if(fromF)list=list.filter(e=>e.date&&e.date>=fromF);
   if(toF)list=list.filter(e=>e.date&&e.date<=toF);
-  // تجميع حسب الشهر ثم اليوم
+  // تجميع حسب الشهر ثم اليوم (هجري أو ميلادي حسب الزر)
   const byMonth={};
+  const useExpHijri=!!window._expHijri;
   list.forEach(e=>{
-    const d=new Date(e.date||'2000-01-01');
-    const mKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    let mKey,mLabel;
+    if(useExpHijri){const hym=hijriYearMonth(e.date||'2000-01-01');mKey=hym.key;mLabel=hym.label;}
+    else{const d=new Date(e.date||'2000-01-01');mKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
     const dKey=e.date;
-    if(!byMonth[mKey])byMonth[mKey]={days:{},total:0,count:0};
+    if(!byMonth[mKey])byMonth[mKey]={days:{},total:0,count:0,label:mLabel};
     if(!byMonth[mKey].days[dKey])byMonth[mKey].days[dKey]=[];
     byMonth[mKey].days[dKey].push(e);
     byMonth[mKey].total+=(e.amount||0);
@@ -2584,13 +2612,13 @@ function renderExpenses(){
   if(acc){
     acc.innerHTML=Object.keys(byMonth).sort().reverse().map(month=>{
       const mData=byMonth[month];
-      const mLabel=new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+      const mLabel=mData.label||new Date(month+'-01').toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
       const daysHtml=Object.keys(mData.days).sort().reverse().map(day=>{
         const rows=mData.days[day];
         const dayTotal=rows.reduce((s,e)=>s+(e.amount||0),0);
         return`<details style="margin-bottom:3px;background:var(--d4);border-radius:2px">
           <summary style="padding:7px 12px;cursor:pointer;font-size:11px;display:flex;justify-content:space-between;list-style:none">
-            <span style="color:var(--white)">${day}</span>
+            <span style="color:var(--white)">${useExpHijri?toHijri(day):day}</span>
             <span style="color:var(--red);font-weight:700">${dayTotal.toLocaleString()} ر.س <span style="color:var(--gr);font-weight:400">(${rows.length})</span></span>
           </summary>
           <table style="width:100%;font-size:11px">
@@ -2860,6 +2888,34 @@ function printReturnInvoice(o,amt,date,items,type){
 
 // ===== REPORTS =====
 // ===== إعداد حقول التاريخ بالتقارير (هجري/ميلادي - نطاق/يوم واحد) =====
+// يبني ثلاث قوائم اختيار (يوم/شهر/سنة هجري) بدل الكتابة الحرة — يضمن قيمة صحيحة دائمًا
+function hijriSelectHtml(prefix,y,m,d){
+  const dayOpts=Array.from({length:30},(_,i)=>i+1).map(n=>`<option value="${n}" ${n===d?'selected':''}>${n}</option>`).join('');
+  const monOpts=HIJRI_MONTHS.map((name,i)=>`<option value="${i+1}" ${i+1===m?'selected':''}>${name}</option>`).join('');
+  const yearOpts=Array.from({length:12},(_,i)=>y-8+i).map(yy=>`<option value="${yy}" ${yy===y?'selected':''}>${yy}هـ</option>`).join('');
+  return`<select class="fi" id="${prefix}_d" onchange="renderReports()" style="min-width:58px">${dayOpts}</select>
+    <select class="fi" id="${prefix}_m" onchange="renderReports()" style="min-width:105px">${monOpts}</select>
+    <select class="fi" id="${prefix}_y" onchange="renderReports()" style="min-width:78px">${yearOpts}</select>`;
+}
+function hijriSelectValue(prefix){
+  const d=document.getElementById(prefix+'_d')?.value;
+  const m=document.getElementById(prefix+'_m')?.value;
+  const y=document.getElementById(prefix+'_y')?.value;
+  if(!d||!m||!y)return'';
+  return`${y}/${String(m).padStart(2,'0')}/${String(d).padStart(2,'0')}`;
+}
+// تحويل هجري لميلادي مع معالجة حالة يوم غير موجود بالشهر (٢٩ يوم بدل ٣٠) بدل الرجوع الصامت لتاريخ اليوم
+function hijriToGregorianSafe(prefix){
+  const d=parseInt(document.getElementById(prefix+'_d')?.value);
+  const m=document.getElementById(prefix+'_m')?.value;
+  const y=document.getElementById(prefix+'_y')?.value;
+  if(!d||!m||!y)return'';
+  for(let dd=d;dd>=Math.max(1,d-2);dd--){
+    const r=hijriToGregorian(`${y}/${String(m).padStart(2,'0')}/${String(dd).padStart(2,'0')}`);
+    if(r)return r;
+  }
+  return'';
+}
 function rebuildReportDateInputs(){
   const wrap=document.getElementById('repDateInputs');if(!wrap)return;
   const calType=document.getElementById('repCalType')?.value||'g';
@@ -2877,16 +2933,14 @@ function rebuildReportDateInputs(){
         <input type="date" class="fi" id="repTo" value="${defTo}" onchange="renderReports()">`;
     }
   }else{
-    // هجري: حقول نصية بصيغة ١٤٤٦/٠١/٠١ يتم تحويلها تلقائياً للميلادي عند العرض
-    const todayH=toHijri(today);
-    const fromH=toHijri(defFrom);
-    const toH=toHijri(defTo);
+    // هجري: قوائم اختيار (يوم/شهر/سنة) — لا كتابة حرة، فلا يمكن أن تكون قيمة غير صالحة
+    const[ty,tm,td]=toHijri(today).split('/').map(Number);
+    const[fy,fm,fd]=toHijri(defFrom).split('/').map(Number);
+    const[gy,gm,gd]=toHijri(defTo).split('/').map(Number);
     if(mode==='single'){
-      wrap.innerHTML=`<input type="text" class="fi" id="repDayH" placeholder="١٤٤٦/٠١/٠١" value="${todayH}" onchange="renderReports()">`;
+      wrap.innerHTML=hijriSelectHtml('repDayH',ty,tm,td);
     }else{
-      wrap.innerHTML=`<input type="text" class="fi" id="repFromH" placeholder="١٤٤٦/٠١/٠١" value="${fromH}" onchange="renderReports()">
-        <span style="color:var(--gr)">إلى</span>
-        <input type="text" class="fi" id="repToH" placeholder="١٤٤٦/١٢/٢٩" value="${toH}" onchange="renderReports()">`;
+      wrap.innerHTML=hijriSelectHtml('repFromH',fy,fm,fd)+'<span style="color:var(--gr)">إلى</span>'+hijriSelectHtml('repToH',gy,gm,gd);
     }
   }
   renderReports();
@@ -2906,11 +2960,11 @@ function getReportDateRange(){
     }
   }else{
     if(mode==='single'){
-      const d=hijriToGregorian(document.getElementById('repDayH')?.value);
+      const d=hijriToGregorianSafe('repDayH');
       fromStr=toStr=d;
     }else{
-      fromStr=hijriToGregorian(document.getElementById('repFromH')?.value);
-      toStr=hijriToGregorian(document.getElementById('repToH')?.value);
+      fromStr=hijriToGregorianSafe('repFromH');
+      toStr=hijriToGregorianSafe('repToH');
     }
   }
   return{fromStr:fromStr||new Date().toISOString().split('T')[0],toStr:toStr||new Date().toISOString().split('T')[0]};
@@ -4289,10 +4343,10 @@ function openHijriPicker(callback){
   _hpCallback=callback;
   // Set current hijri date
   const now=new Date();
-  const h=now.toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric',month:'numeric',day:'numeric'});
-  const parts=h.replace(/[٠-٩]/g,d=>d.charCodeAt(0)-1632).split('/');
-  _hpYear=parseInt(parts[2])||1446;
-  _hpMonth=parseInt(parts[1])||1;
+  const todayStr=now.toISOString().split('T')[0];
+  const hParts=toHijri(todayStr).split('/').map(Number);
+  _hpYear=hParts[0]||1446;
+  _hpMonth=hParts[1]||1;
   _hpView='days';
   renderHijriPicker();
 }
@@ -4355,11 +4409,14 @@ function hpSelectDay(day){
 }
 
 function getHijriMonthDays(year,month){
-  // Approximate: odd months=30, even=29, last month of leap year=30
-  const leapYears=[2,5,7,10,13,16,18,21,24,26,29];
-  const isLeap=leapYears.includes(year%30);
-  if(month===12)return isLeap?30:29;
-  return month%2===1?30:29;
+  // عدد أيام الشهر الفعلي حسب تقويم أم القرى الرسمي (مو نمط ثابت فردي/زوجي) — نحسبه من فرق اليوم الأول لهذا الشهر عن اليوم الأول للشهر التالي
+  const startG=hijriToGreg(year,month,1);
+  const nextY=month===12?year+1:year;
+  const nextM=month===12?1:month+1;
+  const nextStartG=hijriToGreg(nextY,nextM,1);
+  if(!startG||!nextStartG)return 30;
+  const diffDays=Math.round((new Date(nextStartG)-new Date(startG))/86400000);
+  return diffDays>0&&diffDays<=30?diffDays:29;
 }
 
 function getHijriFirstWeekday(year,month){
@@ -4368,24 +4425,9 @@ function getHijriFirstWeekday(year,month){
   return new Date(greg).getDay();
 }
 
+// تحويل هجري → ميلادي دقيق (تقويم أم القرى الرسمي عبر بحث ثنائي مضبوط، بدون أي معادلة تقريبية)
 function hijriToGreg(hy,hm,hd){
-  try{
-    // Accurate Hijri to Gregorian conversion
-    // Using Julian Day Number method
-    const jd=Math.trunc((11*hy+3)/30)+354*hy+30*hm-Math.trunc((hm-1)/2)+hd+1948440-385;
-    // Convert JD to Gregorian
-    let l=jd+68569;
-    const n=Math.trunc((4*l)/146097);
-    l=l-Math.trunc((146097*n+3)/4);
-    const i=Math.trunc((4000*(l+1))/1461001);
-    l=l-Math.trunc((1461*i)/4)+31;
-    const j=Math.trunc((80*l)/2447);
-    const day=l-Math.trunc((2447*j)/80);
-    l=Math.trunc(j/11);
-    const month=j+2-12*l;
-    const year=100*(n-49)+i+l;
-    return`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-  }catch(e){return'';}
+  return hijriToGregorian(`${hy}/${String(hm).padStart(2,'0')}/${String(hd).padStart(2,'0')}`);
 }
 
 // Updated syncH - gregorian date → hijri display
