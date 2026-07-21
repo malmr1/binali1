@@ -177,7 +177,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
 .emp-av{width:46px;height:46px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;color:var(--black);font-weight:700;margin:0 auto 8px}
 
 /* ===== INVOICE ===== */
-.inv-wrap{background:#fff;color:#111;padding:28px 32px;font-family:'Tajawal',sans-serif;direction:rtl;width:210mm;min-height:297mm;font-size:12px;box-sizing:border-box}
+.inv-wrap{background:#fff;color:#111;padding:28px 32px;font-family:'Tajawal',sans-serif;direction:rtl;width:210mm;font-size:12px;box-sizing:border-box}
 .inv-brand{font-size:22px;font-weight:900;color:#000;letter-spacing:2px;text-align:center}
 .inv-sub{font-size:9px;color:#555;text-align:center;margin-top:1px}
 .inv-hr{border:none;border-top:2px solid #000;margin:8px 0}
@@ -223,12 +223,12 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
   .mob-hdr{display:flex}
 }
 @media print{
-  body *{visibility:hidden}
-  #printArea,#printArea *{visibility:visible}
-  /* مهم: بدون position:fixed أو overflow:hidden، عشان المتصفح يقدر يقسم المحتوى الطويل لعدة صفحات بدل ما يقصّه على شاشة وحدة */
-  #printArea{position:static;width:100%;background:#fff;display:block!important;padding:0;margin:0}
-  body{margin:0!important}
-  @page{margin:14mm 10mm}
+  /* الحل الجذري: display:none يحذف العنصر من التخطيط فعليًا (ارتفاع صفر)
+     بعكس visibility:hidden اللي يخفي العنصر بصريًا فقط ويبقي مساحته كاملة —
+     وهذا بالضبط كان يولّد صفحات فارغة/سوداء زائدة قبل محتوى الطباعة الحقيقي */
+  #loginScreen,#app,#MC,#loadOv,#toast{display:none!important}
+  html,body{height:auto!important;min-height:0!important;overflow:visible!important;margin:0!important;padding:0!important}
+  #printArea{display:block!important;position:static;width:100%;background:#fff;padding:0;margin:0}
   .inv-wrap{page-break-inside:avoid;page-break-after:avoid;page-break-before:avoid;margin:0 auto;max-width:190mm}
   * {-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   .no-print{display:none!important}
@@ -241,7 +241,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
   table td,table th{border:1px solid #333!important;color:#000!important;padding:4px 7px!important}
   table th{background:#eee!important;font-weight:900!important}
   /* ===== تصميم طباعة احترافي موحّد لكل التقارير (.print-doc) — أبيض/أسود، رؤوس متكررة، بدون عناصر واجهة داكنة ===== */
-  .print-doc,.print-doc *{color:#111!important;background:transparent!important;box-shadow:none!important;text-shadow:none!important}
+  .print-doc,.print-doc *{color:#111!important;background:transparent!important;box-shadow:none!important;text-shadow:none!important;overflow:visible!important;max-height:none!important;height:auto!important;min-height:0!important;position:static!important}
   .print-doc{background:#fff!important}
   .print-doc table{width:100%;border-collapse:collapse;margin-bottom:12px}
   .print-doc th,.print-doc td{border:1px solid #888!important;padding:5px 8px;font-size:11px}
@@ -258,7 +258,7 @@ tbody td{padding:8px 12px;font-size:12px;color:var(--w2);vertical-align:middle}
   .print-doc .pd-footer{text-align:center;margin-top:10px;font-size:10px;color:#555!important;border-top:1px solid #ccc;padding-top:6px}
   .print-doc .pd-total{font-weight:900;font-size:13px;text-align:center;margin-top:8px;border:2px solid #333;padding:8px}
 }
-@page{size:A4 portrait;margin:8mm}
+@page{size:A4 portrait;margin:10mm}
 
 /* Hijri Calendar */
 .hijri-picker-overlay{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7)}
